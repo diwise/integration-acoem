@@ -28,7 +28,7 @@ func newRouterForTesting() *routerStruct {
 	r := chi.NewRouter()
 	log := log.Logger
 
-	return setupRouter(r, log)
+	return SetupRouter(r, log)
 }
 
 func testRequest(is *is.I, ts *httptest.Server, method, path string, body io.Reader) (*http.Response, string) {

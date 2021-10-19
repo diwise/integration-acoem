@@ -7,7 +7,6 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 )
 
 type Router interface {
@@ -19,11 +18,7 @@ type routerStruct struct {
 	log    zerolog.Logger
 }
 
-func SetupRouter(r chi.Router, log zerolog.Logger) Router {
-	return setupRouter(r, log)
-}
-
-func setupRouter(chiRouter chi.Router, log zerolog.Logger) *routerStruct {
+func SetupRouter(chiRouter chi.Router, log zerolog.Logger) *routerStruct {
 	r := &routerStruct{
 		router: chiRouter,
 		log:    log,
@@ -36,7 +31,7 @@ func setupRouter(chiRouter chi.Router, log zerolog.Logger) *routerStruct {
 }
 
 func (r *routerStruct) Start(port string) error {
-	log.Info().Str("port", port).Msg("starting to listen for connections")
+	r.log.Info().Str("port", port).Msg("starting to listen for connections")
 	return http.ListenAndServe(fmt.Sprintf(":%s", port), r.router)
 }
 
