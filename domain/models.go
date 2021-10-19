@@ -1,6 +1,5 @@
 package domain
 
-// many of these properties may be unnecessary, so far we only really need the UniqueID to make the request for the latest data.
 type Station struct {
 	UniqueId    int    `json:"uniqueID"`
 	StationName string `json:"stationName"`
