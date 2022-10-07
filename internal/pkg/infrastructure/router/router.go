@@ -13,13 +13,13 @@ type Router interface {
 	Start(port string) error
 }
 
-type routerStruct struct {
+type router struct {
 	router chi.Router
 	log    zerolog.Logger
 }
 
-func SetupRouter(chiRouter chi.Router, log zerolog.Logger) *routerStruct {
-	r := &routerStruct{
+func SetupRouter(chiRouter chi.Router, log zerolog.Logger) *router {
+	r := &router{
 		router: chiRouter,
 		log:    log,
 	}
@@ -30,11 +30,11 @@ func SetupRouter(chiRouter chi.Router, log zerolog.Logger) *routerStruct {
 	return r
 }
 
-func (r *routerStruct) Start(port string) error {
+func (r *router) Start(port string) error {
 	r.log.Info().Str("port", port).Msg("starting to listen for connections")
 	return http.ListenAndServe(fmt.Sprintf(":%s", port), r.router)
 }
 
-func (router *routerStruct) health(w http.ResponseWriter, r *http.Request) {
+func (router *router) health(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
