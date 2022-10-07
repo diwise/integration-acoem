@@ -3,7 +3,7 @@ package application
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 
 	"github.com/diwise/integration-acoem/domain"
@@ -26,7 +26,7 @@ func GetSensorData(baseUrl, accountID, accountKey string, station domain.Station
 		return nil, fmt.Errorf("request failed, expected status code %d, got %d", http.StatusOK, resp.StatusCode)
 	}
 
-	respBytes, err := ioutil.ReadAll(resp.Body)
+	respBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response body as bytes: %s", err.Error())
 	}

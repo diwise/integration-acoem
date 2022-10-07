@@ -3,7 +3,7 @@ package application
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 
 	"github.com/diwise/integration-acoem/domain"
@@ -23,7 +23,7 @@ func GetStations(baseUrl, accountID, accountKey string) ([]domain.Station, error
 		return nil, fmt.Errorf("request failed, expected status code %d, got %d", http.StatusOK, response.StatusCode)
 	}
 
-	responseBytes, err := ioutil.ReadAll(response.Body)
+	responseBytes, err := io.ReadAll(response.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response body as bytes: %s", err.Error())
 	}
