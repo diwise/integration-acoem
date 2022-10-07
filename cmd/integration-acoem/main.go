@@ -1,34 +1,32 @@
 package main
 
 import (
-	"os"
+	"context"
 
-	"github.com/go-chi/chi"
-	"github.com/rs/zerolog/log"
+	"github.com/diwise/context-broker/pkg/ngsild/client"
+	"github.com/diwise/service-chassis/pkg/infrastructure/buildinfo"
+	"github.com/diwise/service-chassis/pkg/infrastructure/env"
+	"github.com/diwise/service-chassis/pkg/infrastructure/o11y"
 
 	"github.com/diwise/integration-acoem/internal/pkg/application"
-	router "github.com/diwise/integration-acoem/internal/pkg/infrastructure/router"
 )
 
+const serviceName string = "integration-acoem"
+
 func main() {
-	baseUrl := os.Getenv("ACOEM_BASEURL")
-	accountID := os.Getenv("ACOEM_ACCOUNT_ID")
-	accountKey := os.Getenv("ACOEM_ACCOUNT_KEY")
-	interval := os.Getenv("INTEGRATION_ACOEM_INTERVAL")
-	if interval == "" {
-		interval = "60"
-	}
-	port := os.Getenv("INTEGRATION_ACOEM_PORT")
-	if port == "" {
-		port = "8080"
-	}
+	serviceVersion := buildinfo.SourceVersion()
 
-	r := chi.NewRouter()
+	_, logger, cleanup := o11y.Init(context.Background(), serviceName, serviceVersion)
+	defer cleanup()
 
-	router := router.SetupRouter(r, log.Logger)
+	baseUrl := env.GetVariableOrDie(logger, "ACOEM_BASEURL", "acoem url")
+	accountID := env.GetVariableOrDie(logger, "ACOEM_ACCOUNT_ID", "account ID")
+	accountKey := env.GetVariableOrDie(logger, "ACOEM_ACCOUNT_KEY", "account key")
+	contextBrokerUrl := env.GetVariableOrDie(logger, "CTX_BROKER_URL", "context broker url")
 
-	go application.Run(baseUrl, accountID, accountKey, interval, log.Logger)
+	contextBroker := client.NewContextBrokerClient(contextBrokerUrl)
 
-	router.Start(port)
+	a := application.New(baseUrl, accountID, accountKey, logger, contextBroker)
 
+	a.CreateAirQualityObserved()
 }

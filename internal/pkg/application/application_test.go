@@ -2,7 +2,6 @@ package application
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -12,79 +11,64 @@ import (
 	"github.com/rs/zerolog"
 )
 
-func TestThatRunFailsOnImproperInParameters(t *testing.T) {
-	is := is.New(t)
-	log := zerolog.Logger{}
-
-	server := setupMockService(http.StatusOK, stationsResponse)
-
-	err := Run(server.URL, "", "", "notaninteger", log)
-	is.True(err != nil)
-
-	err = Run(server.URL, "notarealID", "notarealkey", "notaninteger", log)
-	is.True(err != nil)
-}
-
 func TestThatGetStationsFailsIfResponseCodeIsNotOK(t *testing.T) {
-	is := is.New(t)
-	server := setupMockService(http.StatusNotFound, "")
+	is, mockApp := testSetup(t, http.StatusNotFound, "")
 
-	stn, err := GetStations(server.URL, "notarealID", "notarealkey")
+	stn, err := mockApp.getStations()
 	is.True(err != nil)
 	is.True(stn == nil)
 }
 
 func TestThatGetStationsFailsIfReturnedStationDataIsIncorrect(t *testing.T) {
-	is := is.New(t)
-	server := setupMockService(http.StatusOK, stationsBadResponse)
-
-	stn, err := GetStations(server.URL, "notarealID", "notarealkey")
+	is, mockApp := testSetup(t, http.StatusOK, stationsBadResponse)
+	stn, err := mockApp.getStations()
 
 	is.True(err != nil)
 	is.True(stn == nil)
 }
 
 func TestGetSensorDataFailsOnEmptyStationData(t *testing.T) {
-	is := is.New(t)
+	is, mockApp := testSetup(t, http.StatusOK, "")
 
-	server := setupMockService(http.StatusOK, "")
-
-	_, err := GetSensorData(server.URL, "notarealID", "notarealkey", domain.Station{})
+	_, err := mockApp.getSensorData(domain.Station{})
 	is.True(err != nil)
 }
 
 func TestThatGetSensorDataFailsIfResponseCodeIsNotOK(t *testing.T) {
-	is := is.New(t)
+	is, mockApp := testSetup(t, http.StatusNotFound, "")
 
 	stn := domain.Station{
 		UniqueId:    123,
 		StationName: "abc",
 	}
 
-	server := setupMockService(http.StatusNotFound, "")
-
-	result, err := GetSensorData(server.URL, "notarealID", "notarealkey", stn)
+	result, err := mockApp.getSensorData(stn)
 	is.True(err != nil)
 	is.True(result == nil)
 }
 
 func TestThatGetSensorDataReturnsAndMarshalsCorrectly(t *testing.T) {
-	is := is.New(t)
-
+	is, mockApp := testSetup(t, http.StatusOK, acoemResponse)
 	stn := domain.Station{
 		UniqueId:    123,
 		StationName: "abc",
 	}
 
-	server := setupMockService(http.StatusOK, acoemResponse)
-
-	result, err := GetSensorData(server.URL, "notarealID", "notarealkey", stn)
+	result, err := mockApp.getSensorData(stn)
 	is.True(err == nil)
 
-	stnBytes, err := json.MarshalIndent(result, "", "  ")
+	_, err = json.MarshalIndent(result, "", "  ")
 	is.True(err == nil)
+}
 
-	fmt.Print(string(stnBytes))
+func testSetup(t *testing.T, responseCode int, responseBody string) (*is.I, *integrationAcoem) {
+	is := is.New(t)
+	log := zerolog.Logger{}
+	server := setupMockService(responseCode, responseBody)
+	app := New(server.URL, "notarealID", "notarealkey", log, nil)
+	mockApp := app.(*integrationAcoem)
+
+	return is, mockApp
 }
 
 func setupMockService(responseCode int, responseBody string) *httptest.Server {
@@ -95,9 +79,9 @@ func setupMockService(responseCode int, responseBody string) *httptest.Server {
 	}))
 }
 
-const stationsResponse string = `
-[{"UniqueId":888100,"StationType":"Gen2 Logger","StationName":"SUNDSVALL GEN2","SerialNumber":1336,"Firmware":null,"Imsi":null,"Latitude":62.388618,"Longitude":17.308968,"Altitude":null,"CustomerId":"CSUN105032030469"},{"UniqueId":1098100,"StationType":"Mini Gateway","StationName":"SUNDSVALL BERGSGATAN","SerialNumber":null,"Firmware":null,"Imsi":"089462048008002994526","Latitude":62.386485,"Longitude":17.303442,"Altitude":null,"CustomerId":"CSUN105032030469"}]
-`
+//const stationsResponse string = `
+//[{"UniqueId":888100,"StationType":"Gen2 Logger","StationName":"SUNDSVALL GEN2","SerialNumber":1336,"Firmware":null,"Imsi":null,"Latitude":62.388618,"Longitude":17.308968,"Altitude":null,"CustomerId":"CSUN105032030469"},{"UniqueId":1098100,"StationType":"Mini Gateway","StationName":"SUNDSVALL BERGSGATAN","SerialNumber":null,"Firmware":null,"Imsi":"089462048008002994526","Latitude":62.386485,"Longitude":17.303442,"Altitude":null,"CustomerId":"CSUN105032030469"}]
+//`
 
 const stationsBadResponse string = `
 [{"UniqueId":888100,"StationType":"Gen2 Logger","StationName":"SUNDSVALL GEN2","SerialNumber":1336,"Firmware":null,"Imsi":null,"Latitude":62.388618,"Longitude":17.308968,"Altitude":null,"CustomerId":"CSUN105032030469"}{"UniqueId":1098100,"StationType":"Mini Gateway","StationName":"SUNDSVALL BERGSGATAN","SerialNumber":null,"Firmware":null,"Imsi":"089462048008002994526","Latitude":62.386485,"Longitude":17.303442,"Altitude":null,"CustomerId":"CSUN105032030469"}]
