@@ -1,12 +1,19 @@
 package application
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
+	"time"
 
+	"github.com/diwise/context-broker/pkg/datamodels/fiware"
 	"github.com/diwise/context-broker/pkg/ngsild/client"
+	"github.com/diwise/context-broker/pkg/ngsild/types/entities"
+	. "github.com/diwise/context-broker/pkg/ngsild/types/entities/decorators"
+	"github.com/diwise/context-broker/pkg/ngsild/types/properties"
 	"github.com/diwise/integration-acoem/domain"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -35,35 +42,76 @@ func New(baseUrl, accountID, accountKey string, log zerolog.Logger, cb client.Co
 }
 
 func (i *integrationAcoem) CreateAirQualityObserved() error {
+	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
+
 	stations, err := i.getData()
 	if err != nil {
 		return err
 	}
 
-	//this function will map station data to fiware air quality observeds
+	for _, stn := range stations {
+		id := fiware.AirQualityObservedIDPrefix + strconv.Itoa(stn.UniqueId)
 
-	bytes, _ := json.Marshal(stations)
+		decorators := []entities.EntityDecoratorFunc{}
 
-	fmt.Printf("stations %s", string(bytes))
+		for _, sensor := range stn.StationData {
+
+			observed, err := time.Parse(time.RFC3339, sensor.TBTimestamp)
+			if err != nil {
+				observed = time.Time{}
+			}
+
+			decorators = append(decorators,
+				Location(sensor.Latitude, sensor.Longitude),
+				DateTimeIfNotZero(properties.DateObserved, observed),
+			)
+
+			sensorReadings := createFragmentsFromSensorData(sensor.Channels)
+
+			decorators = append(decorators, sensorReadings...)
+		}
+
+		entity, err := entities.New(id, fiware.AirQualityObservedTypeName, decorators...)
+		if err != nil {
+			log.Error().Err(err).Msg("failed to create new entity")
+		}
+
+		_, err = i.cb.CreateEntity(context.Background(), entity, headers)
+		if err != nil {
+			log.Error().Err(err).Msg("failed to post entity to context broker")
+		}
+
+	}
 
 	return nil
 }
 
+func createFragmentsFromSensorData(sensors []domain.Channel) []entities.EntityDecoratorFunc {
+	readings := []entities.EntityDecoratorFunc{}
+
+	for _, sensor := range sensors {
+		readings = append(readings, Number(sensor.SensorLabel, sensor.Scaled, properties.UnitCode(sensor.UnitName)))
+	}
+
+	return readings
+}
+
 func (i *integrationAcoem) getData() ([]domain.Station, error) {
+	var err error
 	if i.accountID == "" || i.accountKey == "" {
-		log.Error().Msg("account id and account key must not be empty")
+		log.Error().Err(err).Msg("account id and account key must not be empty")
 	}
 
 	stations, err := i.getStations()
 	if err != nil {
-		log.Err(err).Msg("failed to retrieve stations")
+		log.Error().Err(err).Msg("failed to retrieve stations")
 		return nil, err
 	}
 
 	for _, stn := range stations {
 		result, err := i.getSensorData(stn)
 		if err != nil {
-			log.Err(err).Msg("failed to retrieve sensor data")
+			log.Error().Err(err).Msg("failed to retrieve sensor data")
 			return nil, err
 		}
 
