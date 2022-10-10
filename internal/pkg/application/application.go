@@ -20,7 +20,7 @@ import (
 )
 
 type IntegrationAcoem interface {
-	CreateAirQualityObserved() error
+	CreateAirQualityObserved(ctx context.Context) error
 }
 
 type integrationAcoem struct {
@@ -41,7 +41,7 @@ func New(baseUrl, accountID, accountKey string, log zerolog.Logger, cb client.Co
 	}
 }
 
-func (i *integrationAcoem) CreateAirQualityObserved() error {
+func (i *integrationAcoem) CreateAirQualityObserved(ctx context.Context) error {
 	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
 
 	stations, err := i.getData()
@@ -76,7 +76,7 @@ func (i *integrationAcoem) CreateAirQualityObserved() error {
 			log.Error().Err(err).Msg("failed to create new entity")
 		}
 
-		_, err = i.cb.CreateEntity(context.Background(), entity, headers)
+		_, err = i.cb.CreateEntity(ctx, entity, headers)
 		if err != nil {
 			log.Error().Err(err).Msg("failed to post entity to context broker")
 		}

@@ -16,7 +16,7 @@ const serviceName string = "integration-acoem"
 func main() {
 	serviceVersion := buildinfo.SourceVersion()
 
-	_, logger, cleanup := o11y.Init(context.Background(), serviceName, serviceVersion)
+	ctx, logger, cleanup := o11y.Init(context.Background(), serviceName, serviceVersion)
 	defer cleanup()
 
 	baseUrl := env.GetVariableOrDie(logger, "ACOEM_BASEURL", "acoem url")
@@ -28,5 +28,5 @@ func main() {
 
 	a := application.New(baseUrl, accountID, accountKey, logger, contextBroker)
 
-	a.CreateAirQualityObserved()
+	a.CreateAirQualityObserved(ctx)
 }
