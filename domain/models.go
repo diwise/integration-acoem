@@ -1,9 +1,8 @@
 package domain
 
 type Station struct {
-	UniqueId    int           `json:"uniqueID"`
-	StationName string        `json:"stationName"`
-	StationData []StationData `json:"stationData"`
+	UniqueId    int    `json:"uniqueID"`
+	StationName string `json:"stationName"`
 }
 
 type StationData struct {

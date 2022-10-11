@@ -55,10 +55,10 @@ func TestThatGetSensorDataReturnsAndMarshalsCorrectly(t *testing.T) {
 	}
 
 	result, err := mockApp.getSensorData(stn)
-	is.True(err == nil)
+	is.NoErr(err)
 
 	_, err = json.MarshalIndent(result, "", "  ")
-	is.True(err == nil)
+	is.NoErr(err)
 }
 
 func testSetup(t *testing.T, responseCode int, responseBody string) (*is.I, *integrationAcoem) {
@@ -79,9 +79,9 @@ func setupMockService(responseCode int, responseBody string) *httptest.Server {
 	}))
 }
 
-//const stationsResponse string = `
-//[{"UniqueId":888100,"StationType":"Gen2 Logger","StationName":"SUNDSVALL GEN2","SerialNumber":1336,"Firmware":null,"Imsi":null,"Latitude":62.388618,"Longitude":17.308968,"Altitude":null,"CustomerId":"CSUN105032030469"},{"UniqueId":1098100,"StationType":"Mini Gateway","StationName":"SUNDSVALL BERGSGATAN","SerialNumber":null,"Firmware":null,"Imsi":"089462048008002994526","Latitude":62.386485,"Longitude":17.303442,"Altitude":null,"CustomerId":"CSUN105032030469"}]
-//`
+const stationsResponse string = `
+[{"UniqueId":888100,"StationType":"Gen2 Logger","StationName":"SUNDSVALL GEN2","SerialNumber":1336,"Firmware":null,"Imsi":null,"Latitude":62.388618,"Longitude":17.308968,"Altitude":null,"CustomerId":"CSUN105032030469"},{"UniqueId":1098100,"StationType":"Mini Gateway","StationName":"SUNDSVALL BERGSGATAN","SerialNumber":null,"Firmware":null,"Imsi":"089462048008002994526","Latitude":62.386485,"Longitude":17.303442,"Altitude":null,"CustomerId":"CSUN105032030469"}]
+`
 
 const stationsBadResponse string = `
 [{"UniqueId":888100,"StationType":"Gen2 Logger","StationName":"SUNDSVALL GEN2","SerialNumber":1336,"Firmware":null,"Imsi":null,"Latitude":62.388618,"Longitude":17.308968,"Altitude":null,"CustomerId":"CSUN105032030469"}{"UniqueId":1098100,"StationType":"Mini Gateway","StationName":"SUNDSVALL BERGSGATAN","SerialNumber":null,"Firmware":null,"Imsi":"089462048008002994526","Latitude":62.386485,"Longitude":17.303442,"Altitude":null,"CustomerId":"CSUN105032030469"}]

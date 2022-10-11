@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/diwise/context-broker/pkg/datamodels/fiware"
@@ -44,17 +45,29 @@ func New(baseUrl, accountID, accountKey string, log zerolog.Logger, cb client.Co
 func (i *integrationAcoem) CreateAirQualityObserved(ctx context.Context) error {
 	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
 
-	stations, err := i.getData()
+	var err error
+	if i.accountID == "" || i.accountKey == "" {
+		log.Error().Err(err).Msg("account id and account key must not be empty")
+	}
+
+	stations, err := i.getStations()
 	if err != nil {
+		log.Error().Err(err).Msg("failed to retrieve stations")
 		return err
 	}
 
 	for _, stn := range stations {
+		sensors, err := i.getSensorData(stn)
+		if err != nil {
+			log.Error().Err(err).Msg("failed to retrieve sensor data")
+			return err
+		}
+
 		id := fiware.AirQualityObservedIDPrefix + strconv.Itoa(stn.UniqueId)
 
 		decorators := []entities.EntityDecoratorFunc{}
 
-		for _, sensor := range stn.StationData {
+		for _, sensor := range sensors {
 
 			observed, err := time.Parse(time.RFC3339, sensor.TBTimestamp)
 			if err != nil {
@@ -90,35 +103,12 @@ func createFragmentsFromSensorData(sensors []domain.Channel) []entities.EntityDe
 	readings := []entities.EntityDecoratorFunc{}
 
 	for _, sensor := range sensors {
-		readings = append(readings, Number(sensor.SensorLabel, sensor.Scaled, properties.UnitCode(sensor.UnitName)))
+		readings = append(readings,
+			Number(strings.ToLower(sensor.SensorLabel), sensor.Scaled, properties.UnitCode(sensor.UnitName)),
+		)
 	}
 
 	return readings
-}
-
-func (i *integrationAcoem) getData() ([]domain.Station, error) {
-	var err error
-	if i.accountID == "" || i.accountKey == "" {
-		log.Error().Err(err).Msg("account id and account key must not be empty")
-	}
-
-	stations, err := i.getStations()
-	if err != nil {
-		log.Error().Err(err).Msg("failed to retrieve stations")
-		return nil, err
-	}
-
-	for _, stn := range stations {
-		result, err := i.getSensorData(stn)
-		if err != nil {
-			log.Error().Err(err).Msg("failed to retrieve sensor data")
-			return nil, err
-		}
-
-		stn.StationData = append(stn.StationData, result...)
-	}
-
-	return stations, nil
 }
 
 func (i *integrationAcoem) getSensorData(station domain.Station) ([]domain.StationData, error) {
