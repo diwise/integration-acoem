@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/diwise/context-broker/pkg/datamodels/fiware"
@@ -89,6 +88,9 @@ func (i *integrationAcoem) CreateAirQualityObserved(ctx context.Context) error {
 			log.Error().Err(err).Msg("failed to create new entity")
 		}
 
+		jsonEnt, _ := json.MarshalIndent(entity, " ", "  ")
+		fmt.Printf("entity: %s", jsonEnt)
+
 		_, err = i.cb.CreateEntity(ctx, entity, headers)
 		if err != nil {
 			log.Error().Err(err).Msg("failed to post entity to context broker")
@@ -99,12 +101,36 @@ func (i *integrationAcoem) CreateAirQualityObserved(ctx context.Context) error {
 	return nil
 }
 
+var unitCodes map[string]string = map[string]string{
+	"Micrograms Per Cubic Meter": "GQ",
+	"Volts":                      "VLT",
+	"Celcius":                    "CEL",
+	"Percent":                    "P1",
+	"Hectopascals":               "A97",
+}
+
+var sensorNames map[string]string = map[string]string{
+	"Humidity":                    "relativeHumidity",
+	"Temperature":                 "temperature",
+	"Air Pressure":                "atmosphericPressure",
+	"Particle Count":              "particleCount",
+	"Particulate Matter (PM 1)":   "PM1",
+	"PM 4":                        "PM4",
+	"Particulate Matter (PM 10)":  "PM10",
+	"Particulate Matter (PM 2.5)": "PM25",
+	"Total Suspended Particulate": "totalSuspendedParticulate",
+	"Voltage":                     "voltage",
+	"Nitric Oxide":                "NO",
+	"Nitrogen Dioxide":            "NO2",
+	"Nitrogen Oxides":             "NOx",
+}
+
 func createFragmentsFromSensorData(sensors []domain.Channel) []entities.EntityDecoratorFunc {
 	readings := []entities.EntityDecoratorFunc{}
 
 	for _, sensor := range sensors {
 		readings = append(readings,
-			Number(strings.ToLower(sensor.SensorLabel), sensor.Scaled, properties.UnitCode(sensor.UnitName)),
+			Number(sensorNames[sensor.SensorName], sensor.Scaled, properties.UnitCode(unitCodes[sensor.UnitName])),
 		)
 	}
 
