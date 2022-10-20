@@ -56,6 +56,7 @@ func (i *integrationAcoem) CreateAirQualityObserved(ctx context.Context) error {
 	}
 
 	for _, stn := range stations {
+
 		sensors, err := i.getSensorData(stn)
 		if err != nil {
 			log.Error().Err(err).Msg("failed to retrieve sensor data")
@@ -104,9 +105,12 @@ func (i *integrationAcoem) CreateAirQualityObserved(ctx context.Context) error {
 var unitCodes map[string]string = map[string]string{
 	"Micrograms Per Cubic Meter": "GQ",
 	"Volts":                      "VLT",
-	"Celcius":                    "CEL",
+	"Celsius":                    "CEL",
 	"Percent":                    "P1",
 	"Hectopascals":               "A97",
+	"Parts Per Billion":          "61",
+	"Pressure (mbar)":            "MBR",
+	"Particles per cm3":          "Particles per cm3",
 }
 
 var sensorNames map[string]string = map[string]string{
