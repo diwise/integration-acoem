@@ -3,14 +3,15 @@ package application
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/diwise/context-broker/pkg/datamodels/fiware"
 	"github.com/diwise/context-broker/pkg/ngsild/client"
+	ngsierrors "github.com/diwise/context-broker/pkg/ngsild/errors"
 	"github.com/diwise/context-broker/pkg/ngsild/types/entities"
 	. "github.com/diwise/context-broker/pkg/ngsild/types/entities/decorators"
 	"github.com/diwise/context-broker/pkg/ngsild/types/properties"
@@ -63,20 +64,12 @@ func (i *integrationAcoem) CreateAirQualityObserved(ctx context.Context) error {
 			return err
 		}
 
-		id := fiware.AirQualityObservedIDPrefix + strconv.Itoa(stn.UniqueId)
-
 		decorators := []entities.EntityDecoratorFunc{}
 
 		for _, sensor := range sensors {
-
-			observed, err := time.Parse(time.RFC3339, sensor.TBTimestamp)
-			if err != nil {
-				observed = time.Time{}
-			}
-
 			decorators = append(decorators,
 				Location(sensor.Latitude, sensor.Longitude),
-				DateTimeIfNotZero(properties.DateObserved, observed),
+				DateTime(properties.DateObserved, sensor.TBTimestamp),
 			)
 
 			sensorReadings := createFragmentsFromSensorData(sensor.Channels)
@@ -84,19 +77,30 @@ func (i *integrationAcoem) CreateAirQualityObserved(ctx context.Context) error {
 			decorators = append(decorators, sensorReadings...)
 		}
 
-		entity, err := entities.New(id, fiware.AirQualityObservedTypeName, decorators...)
+		fragment, err := entities.NewFragment(decorators...)
 		if err != nil {
-			log.Error().Err(err).Msg("failed to create new entity")
+			log.Error().Err(err).Msg("failed to create entity fragments")
 		}
 
-		jsonEnt, _ := json.MarshalIndent(entity, " ", "  ")
-		fmt.Printf("entity: %s", jsonEnt)
+		entityID := fiware.AirQualityObservedIDPrefix + strconv.Itoa(stn.UniqueId)
 
-		_, err = i.cb.CreateEntity(ctx, entity, headers)
+		_, err = i.cb.MergeEntity(ctx, entityID, fragment, headers)
 		if err != nil {
-			log.Error().Err(err).Msg("failed to post entity to context broker")
-		}
+			if !errors.Is(err, ngsierrors.ErrNotFound) {
+				log.Error().Err(err).Msg("failed to merge entity")
+				continue
+			}
 
+			entity, err := entities.New(entityID, fiware.AirQualityObservedTypeName, decorators...)
+			if err != nil {
+				log.Error().Err(err).Msg("failed to create new entity")
+			}
+
+			_, err = i.cb.CreateEntity(ctx, entity, headers)
+			if err != nil {
+				log.Error().Err(err).Msg("failed to post entity to context broker")
+			}
+		}
 	}
 
 	return nil
@@ -110,14 +114,12 @@ var unitCodes map[string]string = map[string]string{
 	"Hectopascals":               "A97",
 	"Parts Per Billion":          "61",
 	"Pressure (mbar)":            "MBR",
-	"Particles per cm3":          "Particles per cm3",
 }
 
 var sensorNames map[string]string = map[string]string{
 	"Humidity":                    "relativeHumidity",
 	"Temperature":                 "temperature",
 	"Air Pressure":                "atmosphericPressure",
-	"Particle Count":              "particleCount",
 	"Particulate Matter (PM 1)":   "PM1",
 	"PM 4":                        "PM4",
 	"Particulate Matter (PM 10)":  "PM10",
