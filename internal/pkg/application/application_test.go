@@ -3,16 +3,35 @@ package application
 import (
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	"github.com/diwise/integration-acoem/domain"
+	testutils "github.com/diwise/service-chassis/pkg/test/http"
+	"github.com/diwise/service-chassis/pkg/test/http/expects"
+	"github.com/diwise/service-chassis/pkg/test/http/response"
 	"github.com/matryer/is"
 	"github.com/rs/zerolog"
 )
 
+var Expects = testutils.Expects
+var Returns = testutils.Returns
+var method = expects.RequestMethod
+
 func TestThatGetStationsFailsIfResponseCodeIsNotOK(t *testing.T) {
-	is, mockApp := testSetup(t, http.StatusNotFound, "")
+	is := is.New(t)
+
+	s := testutils.NewMockServiceThat(
+		Expects(
+			is,
+			method(http.MethodGet),
+		),
+		Returns(
+			response.Code(http.StatusNotFound),
+			response.Body([]byte("")),
+		),
+	)
+
+	mockApp := newMockApp(t, s.URL())
 
 	stn, err := mockApp.getStations()
 	is.True(err != nil)
@@ -20,7 +39,20 @@ func TestThatGetStationsFailsIfResponseCodeIsNotOK(t *testing.T) {
 }
 
 func TestThatGetStationsFailsIfReturnedStationDataIsIncorrect(t *testing.T) {
-	is, mockApp := testSetup(t, http.StatusOK, stationsBadResponse)
+	is := is.New(t)
+
+	s := testutils.NewMockServiceThat(
+		Expects(
+			is,
+			method(http.MethodGet),
+		),
+		Returns(
+			response.Code(http.StatusOK),
+			response.Body([]byte(stationsBadResponse)),
+		),
+	)
+
+	mockApp := newMockApp(t, s.URL())
 	stn, err := mockApp.getStations()
 
 	is.True(err != nil)
@@ -28,14 +60,38 @@ func TestThatGetStationsFailsIfReturnedStationDataIsIncorrect(t *testing.T) {
 }
 
 func TestGetSensorDataFailsOnEmptyStationData(t *testing.T) {
-	is, mockApp := testSetup(t, http.StatusOK, "")
+	is := is.New(t)
+
+	s := testutils.NewMockServiceThat(
+		Expects(
+			is,
+			method(http.MethodGet),
+		),
+		Returns(
+			response.Code(http.StatusOK),
+			response.Body([]byte("")),
+		),
+	)
+	mockApp := newMockApp(t, s.URL())
 
 	_, err := mockApp.getSensorData(domain.Station{})
 	is.True(err != nil)
 }
 
 func TestThatGetSensorDataFailsIfResponseCodeIsNotOK(t *testing.T) {
-	is, mockApp := testSetup(t, http.StatusNotFound, "")
+	is := is.New(t)
+
+	s := testutils.NewMockServiceThat(
+		Expects(
+			is,
+			method(http.MethodGet),
+		),
+		Returns(
+			response.Code(http.StatusNotFound),
+			response.Body([]byte("")),
+		),
+	)
+	mockApp := newMockApp(t, s.URL())
 
 	stn := domain.Station{
 		UniqueId:    123,
@@ -48,7 +104,19 @@ func TestThatGetSensorDataFailsIfResponseCodeIsNotOK(t *testing.T) {
 }
 
 func TestThatGetSensorDataReturnsAndMarshalsCorrectly(t *testing.T) {
-	is, mockApp := testSetup(t, http.StatusOK, acoemResponse)
+	is := is.New(t)
+
+	s := testutils.NewMockServiceThat(
+		Expects(
+			is,
+			method(http.MethodGet),
+		),
+		Returns(
+			response.Code(http.StatusOK),
+			response.Body([]byte(acoemResponse)),
+		),
+	)
+	mockApp := newMockApp(t, s.URL())
 	stn := domain.Station{
 		UniqueId:    123,
 		StationName: "abc",
@@ -61,22 +129,12 @@ func TestThatGetSensorDataReturnsAndMarshalsCorrectly(t *testing.T) {
 	is.NoErr(err)
 }
 
-func testSetup(t *testing.T, responseCode int, responseBody string) (*is.I, *integrationAcoem) {
-	is := is.New(t)
+func newMockApp(t *testing.T, serverURL string) *integrationAcoem {
 	log := zerolog.Logger{}
-	server := setupMockService(responseCode, responseBody)
-	app := New(server.URL, "notarealID", "notarealkey", log, nil)
+	app := New(serverURL, "notarealID", "notarealkey", log, nil)
 	mockApp := app.(*integrationAcoem)
 
-	return is, mockApp
-}
-
-func setupMockService(responseCode int, responseBody string) *httptest.Server {
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Add("Content-Type", "application/ld+json")
-		w.WriteHeader(responseCode)
-		w.Write([]byte(responseBody))
-	}))
+	return mockApp
 }
 
 /*const stationsResponse string = `

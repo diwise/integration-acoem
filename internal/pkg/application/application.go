@@ -45,11 +45,6 @@ func New(baseUrl, accountID, accountKey string, log zerolog.Logger, cb client.Co
 func (i *integrationAcoem) CreateAirQualityObserved(ctx context.Context) error {
 	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
 
-	var err error
-	if i.accountID == "" || i.accountKey == "" {
-		log.Error().Err(err).Msg("account id and account key must not be empty")
-	}
-
 	stations, err := i.getStations()
 	if err != nil {
 		log.Error().Err(err).Msg("failed to retrieve stations")
@@ -94,11 +89,13 @@ func (i *integrationAcoem) CreateAirQualityObserved(ctx context.Context) error {
 			entity, err := entities.New(entityID, fiware.AirQualityObservedTypeName, decorators...)
 			if err != nil {
 				log.Error().Err(err).Msg("failed to create new entity")
+				continue
 			}
 
 			_, err = i.cb.CreateEntity(ctx, entity, headers)
 			if err != nil {
 				log.Error().Err(err).Msg("failed to post entity to context broker")
+				continue
 			}
 		}
 	}
@@ -135,9 +132,13 @@ func createFragmentsFromSensorData(sensors []domain.Channel) []entities.EntityDe
 	readings := []entities.EntityDecoratorFunc{}
 
 	for _, sensor := range sensors {
-		readings = append(readings,
-			Number(sensorNames[sensor.SensorName], sensor.Scaled, properties.UnitCode(unitCodes[sensor.UnitName])),
-		)
+		name, ok := sensorNames[sensor.SensorName]
+		if ok {
+			readings = append(readings,
+				Number(sensorNames[name], sensor.Scaled, properties.UnitCode(unitCodes[sensor.UnitName])),
+			)
+		}
+
 	}
 
 	return readings
