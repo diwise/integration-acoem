@@ -24,7 +24,7 @@ func TestThatHealthEndpointReturns204(t *testing.T) {
 	is.Equal(resp.StatusCode, http.StatusNoContent) // health endpoint status code not ok
 }
 
-func newRouterForTesting() *routerStruct {
+func newRouterForTesting() *router {
 	r := chi.NewRouter()
 	log := log.Logger
 

@@ -2,43 +2,58 @@ package application
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	"github.com/diwise/integration-acoem/domain"
+	testutils "github.com/diwise/service-chassis/pkg/test/http"
+	"github.com/diwise/service-chassis/pkg/test/http/expects"
+	"github.com/diwise/service-chassis/pkg/test/http/response"
 	"github.com/matryer/is"
 	"github.com/rs/zerolog"
 )
 
-func TestThatRunFailsOnImproperInParameters(t *testing.T) {
-	is := is.New(t)
-	log := zerolog.Logger{}
-
-	server := setupMockService(http.StatusOK, stationsResponse)
-
-	err := Run(server.URL, "", "", "notaninteger", log)
-	is.True(err != nil)
-
-	err = Run(server.URL, "notarealID", "notarealkey", "notaninteger", log)
-	is.True(err != nil)
-}
+var Expects = testutils.Expects
+var Returns = testutils.Returns
+var method = expects.RequestMethod
 
 func TestThatGetStationsFailsIfResponseCodeIsNotOK(t *testing.T) {
 	is := is.New(t)
-	server := setupMockService(http.StatusNotFound, "")
 
-	stn, err := GetStations(server.URL, "notarealID", "notarealkey")
+	s := testutils.NewMockServiceThat(
+		Expects(
+			is,
+			method(http.MethodGet),
+		),
+		Returns(
+			response.Code(http.StatusNotFound),
+			response.Body([]byte("")),
+		),
+	)
+
+	mockApp := newMockApp(t, s.URL())
+
+	stn, err := mockApp.getStations()
 	is.True(err != nil)
 	is.True(stn == nil)
 }
 
 func TestThatGetStationsFailsIfReturnedStationDataIsIncorrect(t *testing.T) {
 	is := is.New(t)
-	server := setupMockService(http.StatusOK, stationsBadResponse)
 
-	stn, err := GetStations(server.URL, "notarealID", "notarealkey")
+	s := testutils.NewMockServiceThat(
+		Expects(
+			is,
+			method(http.MethodGet),
+		),
+		Returns(
+			response.Code(http.StatusOK),
+			response.Body([]byte(stationsBadResponse)),
+		),
+	)
+
+	mockApp := newMockApp(t, s.URL())
+	stn, err := mockApp.getStations()
 
 	is.True(err != nil)
 	is.True(stn == nil)
@@ -47,23 +62,43 @@ func TestThatGetStationsFailsIfReturnedStationDataIsIncorrect(t *testing.T) {
 func TestGetSensorDataFailsOnEmptyStationData(t *testing.T) {
 	is := is.New(t)
 
-	server := setupMockService(http.StatusOK, "")
+	s := testutils.NewMockServiceThat(
+		Expects(
+			is,
+			method(http.MethodGet),
+		),
+		Returns(
+			response.Code(http.StatusOK),
+			response.Body([]byte("")),
+		),
+	)
+	mockApp := newMockApp(t, s.URL())
 
-	_, err := GetSensorData(server.URL, "notarealID", "notarealkey", domain.Station{})
+	_, err := mockApp.getSensorData(domain.Station{})
 	is.True(err != nil)
 }
 
 func TestThatGetSensorDataFailsIfResponseCodeIsNotOK(t *testing.T) {
 	is := is.New(t)
 
+	s := testutils.NewMockServiceThat(
+		Expects(
+			is,
+			method(http.MethodGet),
+		),
+		Returns(
+			response.Code(http.StatusNotFound),
+			response.Body([]byte("")),
+		),
+	)
+	mockApp := newMockApp(t, s.URL())
+
 	stn := domain.Station{
 		UniqueId:    123,
 		StationName: "abc",
 	}
 
-	server := setupMockService(http.StatusNotFound, "")
-
-	result, err := GetSensorData(server.URL, "notarealID", "notarealkey", stn)
+	result, err := mockApp.getSensorData(stn)
 	is.True(err != nil)
 	is.True(result == nil)
 }
@@ -71,33 +106,40 @@ func TestThatGetSensorDataFailsIfResponseCodeIsNotOK(t *testing.T) {
 func TestThatGetSensorDataReturnsAndMarshalsCorrectly(t *testing.T) {
 	is := is.New(t)
 
+	s := testutils.NewMockServiceThat(
+		Expects(
+			is,
+			method(http.MethodGet),
+		),
+		Returns(
+			response.Code(http.StatusOK),
+			response.Body([]byte(acoemResponse)),
+		),
+	)
+	mockApp := newMockApp(t, s.URL())
 	stn := domain.Station{
 		UniqueId:    123,
 		StationName: "abc",
 	}
 
-	server := setupMockService(http.StatusOK, acoemResponse)
+	result, err := mockApp.getSensorData(stn)
+	is.NoErr(err)
 
-	result, err := GetSensorData(server.URL, "notarealID", "notarealkey", stn)
-	is.True(err == nil)
-
-	stnBytes, err := json.MarshalIndent(result, "", "  ")
-	is.True(err == nil)
-
-	fmt.Print(string(stnBytes))
+	_, err = json.MarshalIndent(result, "", "  ")
+	is.NoErr(err)
 }
 
-func setupMockService(responseCode int, responseBody string) *httptest.Server {
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Add("Content-Type", "application/ld+json")
-		w.WriteHeader(responseCode)
-		w.Write([]byte(responseBody))
-	}))
+func newMockApp(t *testing.T, serverURL string) *integrationAcoem {
+	log := zerolog.Logger{}
+	app := New(serverURL, "notarealID", "notarealkey", log, nil)
+	mockApp := app.(*integrationAcoem)
+
+	return mockApp
 }
 
-const stationsResponse string = `
+/*const stationsResponse string = `
 [{"UniqueId":888100,"StationType":"Gen2 Logger","StationName":"SUNDSVALL GEN2","SerialNumber":1336,"Firmware":null,"Imsi":null,"Latitude":62.388618,"Longitude":17.308968,"Altitude":null,"CustomerId":"CSUN105032030469"},{"UniqueId":1098100,"StationType":"Mini Gateway","StationName":"SUNDSVALL BERGSGATAN","SerialNumber":null,"Firmware":null,"Imsi":"089462048008002994526","Latitude":62.386485,"Longitude":17.303442,"Altitude":null,"CustomerId":"CSUN105032030469"}]
-`
+`*/
 
 const stationsBadResponse string = `
 [{"UniqueId":888100,"StationType":"Gen2 Logger","StationName":"SUNDSVALL GEN2","SerialNumber":1336,"Firmware":null,"Imsi":null,"Latitude":62.388618,"Longitude":17.308968,"Altitude":null,"CustomerId":"CSUN105032030469"}{"UniqueId":1098100,"StationType":"Mini Gateway","StationName":"SUNDSVALL BERGSGATAN","SerialNumber":null,"Firmware":null,"Imsi":"089462048008002994526","Latitude":62.386485,"Longitude":17.303442,"Altitude":null,"CustomerId":"CSUN105032030469"}]
