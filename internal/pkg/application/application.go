@@ -52,7 +52,6 @@ func (i *integrationAcoem) CreateAirQualityObserved(ctx context.Context) error {
 	}
 
 	for _, stn := range stations {
-
 		sensors, err := i.getSensorData(stn)
 		if err != nil {
 			log.Error().Err(err).Msg("failed to retrieve sensor data")
@@ -60,6 +59,8 @@ func (i *integrationAcoem) CreateAirQualityObserved(ctx context.Context) error {
 		}
 
 		decorators := []entities.EntityDecoratorFunc{}
+
+		decorators = append(decorators, entities.DefaultContext(), Text("areaServed", stn.StationName))
 
 		for _, sensor := range sensors {
 			decorators = append(decorators,
@@ -134,9 +135,8 @@ func createFragmentsFromSensorData(sensors []domain.Channel) []entities.EntityDe
 	for _, sensor := range sensors {
 		name, ok := sensorNames[sensor.SensorName]
 		if ok {
-			readings = append(readings,
-				Number(sensorNames[name], sensor.Scaled, properties.UnitCode(unitCodes[sensor.UnitName])),
-			)
+
+			readings = append(readings, Number(name, sensor.Scaled, properties.UnitCode(unitCodes[sensor.UnitName])))
 		}
 
 	}
