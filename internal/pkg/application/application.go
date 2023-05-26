@@ -68,7 +68,7 @@ func (i *integrationAcoem) CreateAirQualityObserved(ctx context.Context) error {
 				DateTime(properties.DateObserved, sensor.TBTimestamp),
 			)
 
-			sensorReadings := createFragmentsFromSensorData(sensor.Channels)
+			sensorReadings := createFragmentsFromSensorData(sensor.Channels, sensor.TBTimestamp)
 
 			decorators = append(decorators, sensorReadings...)
 		}
@@ -129,16 +129,19 @@ var sensorNames map[string]string = map[string]string{
 	"Nitrogen Oxides":             "NOx",
 }
 
-func createFragmentsFromSensorData(sensors []domain.Channel) []entities.EntityDecoratorFunc {
+func createFragmentsFromSensorData(sensors []domain.Channel, timestamp string) []entities.EntityDecoratorFunc {
 	readings := []entities.EntityDecoratorFunc{}
 
 	for _, sensor := range sensors {
 		name, ok := sensorNames[sensor.SensorName]
 		if ok {
-
-			readings = append(readings, Number(name, sensor.Scaled, properties.UnitCode(unitCodes[sensor.UnitName])))
+			readings = append(readings, Number(
+				name,
+				sensor.Scaled,
+				properties.UnitCode(unitCodes[sensor.UnitName]),
+				properties.ObservedAt(timestamp),
+			))
 		}
-
 	}
 
 	return readings
