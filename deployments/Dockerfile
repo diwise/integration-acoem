@@ -19,6 +19,8 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build
 FROM registry.access.redhat.com/ubi8/ubi-minimal
 WORKDIR /opt/diwise
 
+LABEL org.opencontainers.image.source=https://github.com/diwise/integration-acoem
+
 COPY --from=builder /app/cmd/integration-acoem/integration-acoem /opt/diwise/
 
 RUN chmod 775 /opt/diwise
