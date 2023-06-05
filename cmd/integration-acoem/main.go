@@ -22,7 +22,7 @@ func main() {
 	baseUrl := env.GetVariableOrDie(logger, "ACOEM_BASEURL", "acoem url")
 	accountID := env.GetVariableOrDie(logger, "ACOEM_ACCOUNT_ID", "account ID")
 	accountKey := env.GetVariableOrDie(logger, "ACOEM_ACCOUNT_KEY", "account key")
-	contextBrokerUrl := env.GetVariableOrDie(logger, "CTX_BROKER_URL", "context broker url")
+	contextBrokerUrl := env.GetVariableOrDie(logger, "CONTEXT_BROKER_URL", "context broker url")
 
 	contextBroker := client.NewContextBrokerClient(contextBrokerUrl)
 
