@@ -19,9 +19,9 @@ func main() {
 	ctx, logger, cleanup := o11y.Init(context.Background(), serviceName, serviceVersion)
 	defer cleanup()
 
-	baseUrl := env.GetVariableOrDie(logger, "ACOEM_BASEURL", "acoem url")
-	accountID := env.GetVariableOrDie(logger, "ACOEM_ACCOUNT_ID", "account ID")
-	accountKey := env.GetVariableOrDie(logger, "ACOEM_ACCOUNT_KEY", "account key")
+	baseUrl := env.GetVariableOrDie(logger, "ACOEM_BASEURL", "acoem base url")
+	accountID := env.GetVariableOrDie(logger, "ACOEM_ACCOUNT_ID", "acoem account ID")
+	accountKey := env.GetVariableOrDie(logger, "ACOEM_ACCOUNT_KEY", "acoem account key")
 	contextBrokerUrl := env.GetVariableOrDie(logger, "CONTEXT_BROKER_URL", "context broker url")
 
 	contextBroker := client.NewContextBrokerClient(contextBrokerUrl)
