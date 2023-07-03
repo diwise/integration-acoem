@@ -16,8 +16,7 @@ import (
 	. "github.com/diwise/context-broker/pkg/ngsild/types/entities/decorators"
 	"github.com/diwise/context-broker/pkg/ngsild/types/properties"
 	"github.com/diwise/integration-acoem/domain"
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
+	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
 )
 
 type IntegrationAcoem interface {
@@ -28,33 +27,33 @@ type integrationAcoem struct {
 	baseUrl    string
 	accountID  string
 	accountKey string
-	log        zerolog.Logger
 	cb         client.ContextBrokerClient
 }
 
-func New(baseUrl, accountID, accountKey string, log zerolog.Logger, cb client.ContextBrokerClient) IntegrationAcoem {
+func New(ctx context.Context, baseUrl, accountID, accountKey string, cb client.ContextBrokerClient) IntegrationAcoem {
 	return &integrationAcoem{
 		baseUrl:    baseUrl,
 		accountID:  accountID,
 		accountKey: accountKey,
-		log:        log,
 		cb:         cb,
 	}
 }
 
 func (i *integrationAcoem) CreateAirQualityObserved(ctx context.Context) error {
+	logger := logging.GetFromContext(ctx)
+
 	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
 
 	stations, err := i.getStations()
 	if err != nil {
-		log.Error().Err(err).Msg("failed to retrieve stations")
+		logger.Error().Err(err).Msg("failed to retrieve stations")
 		return err
 	}
 
 	for _, stn := range stations {
 		sensors, err := i.getSensorData(stn)
 		if err != nil {
-			log.Error().Err(err).Msg("failed to retrieve sensor data")
+			logger.Error().Err(err).Msg("failed to retrieve sensor data")
 			return err
 		}
 
@@ -75,7 +74,7 @@ func (i *integrationAcoem) CreateAirQualityObserved(ctx context.Context) error {
 
 		fragment, err := entities.NewFragment(decorators...)
 		if err != nil {
-			log.Error().Err(err).Msg("failed to create entity fragments")
+			logger.Error().Err(err).Msg("failed to create entity fragments")
 		}
 
 		entityID := fiware.AirQualityObservedIDPrefix + strconv.Itoa(stn.UniqueId)
@@ -83,19 +82,19 @@ func (i *integrationAcoem) CreateAirQualityObserved(ctx context.Context) error {
 		_, err = i.cb.MergeEntity(ctx, entityID, fragment, headers)
 		if err != nil {
 			if !errors.Is(err, ngsierrors.ErrNotFound) {
-				log.Error().Err(err).Msg("failed to merge entity")
+				logger.Error().Err(err).Msg("failed to merge entity")
 				continue
 			}
 
 			entity, err := entities.New(entityID, fiware.AirQualityObservedTypeName, decorators...)
 			if err != nil {
-				log.Error().Err(err).Msg("failed to create new entity")
+				logger.Error().Err(err).Msg("failed to create new entity")
 				continue
 			}
 
 			_, err = i.cb.CreateEntity(ctx, entity, headers)
 			if err != nil {
-				log.Error().Err(err).Msg("failed to post entity to context broker")
+				logger.Error().Err(err).Msg("failed to post entity to context broker")
 				continue
 			}
 		}

@@ -26,7 +26,7 @@ func main() {
 
 	contextBroker := client.NewContextBrokerClient(contextBrokerUrl)
 
-	a := application.New(baseUrl, accountID, accountKey, logger, contextBroker)
+	a := application.New(ctx, baseUrl, accountID, accountKey, contextBroker)
 
 	a.CreateAirQualityObserved(ctx)
 }

@@ -1,6 +1,7 @@
 package application
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"testing"
@@ -10,7 +11,6 @@ import (
 	"github.com/diwise/service-chassis/pkg/test/http/expects"
 	"github.com/diwise/service-chassis/pkg/test/http/response"
 	"github.com/matryer/is"
-	"github.com/rs/zerolog"
 )
 
 var Expects = testutils.Expects
@@ -130,8 +130,7 @@ func TestThatGetSensorDataReturnsAndMarshalsCorrectly(t *testing.T) {
 }
 
 func newMockApp(t *testing.T, serverURL string) *integrationAcoem {
-	log := zerolog.Logger{}
-	app := New(serverURL, "notarealID", "notarealkey", log, nil)
+	app := New(context.Background(), serverURL, "notarealID", "notarealkey", nil)
 	mockApp := app.(*integrationAcoem)
 
 	return mockApp
