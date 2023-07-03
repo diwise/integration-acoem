@@ -5,9 +5,7 @@ go 1.20
 require (
 	github.com/diwise/context-broker v0.0.0-20230317132920-05bfe58ce82d
 	github.com/diwise/service-chassis v0.0.0-20230605073644-f9cf02dc000d
-	github.com/go-chi/chi v1.5.4
 	github.com/matryer/is v1.4.1
-	github.com/rs/zerolog v1.29.1
 )
 
 require (
@@ -42,6 +40,7 @@ require (
 	github.com/prometheus/client_model v0.4.0 // indirect
 	github.com/prometheus/common v0.44.0 // indirect
 	github.com/prometheus/procfs v0.10.1 // indirect
+	github.com/rs/zerolog v1.29.1 // indirect
 	golang.org/x/net v0.10.0 // indirect
 	golang.org/x/sys v0.8.0 // indirect
 	golang.org/x/text v0.9.0 // indirect
