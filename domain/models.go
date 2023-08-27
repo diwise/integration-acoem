@@ -1,11 +1,11 @@
 package domain
 
-type Station struct {
-	UniqueId    int    `json:"uniqueID"`
-	StationName string `json:"stationName"`
+type Device struct {
+	UniqueId   int    `json:"uniqueID"`
+	DeviceName string `json:"deviceName"`
 }
 
-type StationData struct {
+type DeviceData struct {
 	TBTimestamp string    `json:"tbtimestamp"`
 	TETimestamp string    `json:"tetimestamp"`
 	Latitude    float64   `json:"latitude"`

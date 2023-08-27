@@ -24,18 +24,16 @@ type IntegrationAcoem interface {
 }
 
 type integrationAcoem struct {
-	baseUrl    string
-	accountID  string
-	accountKey string
-	cb         client.ContextBrokerClient
+	baseUrl     string
+	accessToken string
+	cb          client.ContextBrokerClient
 }
 
-func New(ctx context.Context, baseUrl, accountID, accountKey string, cb client.ContextBrokerClient) IntegrationAcoem {
+func New(ctx context.Context, baseUrl, accessToken string, cb client.ContextBrokerClient) IntegrationAcoem {
 	return &integrationAcoem{
-		baseUrl:    baseUrl,
-		accountID:  accountID,
-		accountKey: accountKey,
-		cb:         cb,
+		baseUrl:     baseUrl,
+		accessToken: accessToken,
+		cb:          cb,
 	}
 }
 
@@ -44,14 +42,14 @@ func (i *integrationAcoem) CreateAirQualityObserved(ctx context.Context) error {
 
 	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
 
-	stations, err := i.getStations()
+	devices, err := i.getDevices()
 	if err != nil {
-		logger.Error().Err(err).Msg("failed to retrieve stations")
+		logger.Error().Err(err).Msg("failed to retrieve devices")
 		return err
 	}
 
-	for _, stn := range stations {
-		sensors, err := i.getSensorData(stn)
+	for _, dev := range devices {
+		sensors, err := i.getDeviceData(dev)
 		if err != nil {
 			logger.Error().Err(err).Msg("failed to retrieve sensor data")
 			return err
@@ -59,7 +57,7 @@ func (i *integrationAcoem) CreateAirQualityObserved(ctx context.Context) error {
 
 		decorators := []entities.EntityDecoratorFunc{}
 
-		decorators = append(decorators, entities.DefaultContext(), Text("areaServed", stn.StationName))
+		decorators = append(decorators, entities.DefaultContext(), Text("areaServed", dev.DeviceName))
 
 		for _, sensor := range sensors {
 			decorators = append(decorators,
@@ -77,7 +75,7 @@ func (i *integrationAcoem) CreateAirQualityObserved(ctx context.Context) error {
 			logger.Error().Err(err).Msg("failed to create entity fragments")
 		}
 
-		entityID := fiware.AirQualityObservedIDPrefix + strconv.Itoa(stn.UniqueId)
+		entityID := fiware.AirQualityObservedIDPrefix + strconv.Itoa(dev.UniqueId)
 
 		_, err = i.cb.MergeEntity(ctx, entityID, fragment, headers)
 		if err != nil {
@@ -146,15 +144,25 @@ func createFragmentsFromSensorData(sensors []domain.Channel, timestamp string) [
 	return readings
 }
 
-func (i *integrationAcoem) getSensorData(station domain.Station) ([]domain.StationData, error) {
-	if station.UniqueId == 0 || station.StationName == "" {
+func (i *integrationAcoem) getDeviceData(device domain.Device) ([]domain.DeviceData, error) {
+	if device.UniqueId == 0 || device.DeviceName == "" {
 		return nil, fmt.Errorf("cannot retrieve sensor data as no valid station ID has been provided")
 	}
-	stationData := []domain.StationData{}
+	deviceData := []domain.DeviceData{}
 
-	resp, err := http.Get(fmt.Sprintf("%s/3.5/GET/%s/%s/stationdata/latest/2/%d", i.baseUrl, i.accountID, i.accountKey, station.UniqueId))
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/devices/setup/%d", i.baseUrl, device.UniqueId), nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve list of stations: %s", err.Error())
+		return nil, fmt.Errorf("failed to create request: %s", err.Error())
+	}
+
+	req.Header.Add("Accept", "application/json")
+	req.Header.Add("Authorization", i.accessToken)
+
+	client := http.DefaultClient
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve sensor data: %s", err.Error())
 	}
 
 	defer resp.Body.Close()
@@ -168,20 +176,30 @@ func (i *integrationAcoem) getSensorData(station domain.Station) ([]domain.Stati
 		return nil, fmt.Errorf("failed to read response body as bytes: %s", err.Error())
 	}
 
-	err = json.Unmarshal(respBytes, &stationData)
+	err = json.Unmarshal(respBytes, &deviceData)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal json data: %s", err.Error())
 	}
 
-	return stationData, nil
+	return deviceData, nil
 }
 
-func (i *integrationAcoem) getStations() ([]domain.Station, error) {
-	stations := []domain.Station{}
+func (i *integrationAcoem) getDevices() ([]domain.Device, error) {
+	devices := []domain.Device{}
 
-	response, err := http.Get(fmt.Sprintf("%s/3.5/GET/%s/%s/stations", i.baseUrl, i.accountID, i.accountKey))
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/devices", i.baseUrl), nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve list of stations: %s", err.Error())
+		return nil, fmt.Errorf("failed to create request: %s", err.Error())
+	}
+
+	req.Header.Add("Accept", "application/json")
+	req.Header.Add("Authorization", i.accessToken)
+
+	client := http.DefaultClient
+
+	response, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve list of devices: %s", err.Error())
 	}
 
 	defer response.Body.Close()
@@ -195,10 +213,10 @@ func (i *integrationAcoem) getStations() ([]domain.Station, error) {
 		return nil, fmt.Errorf("failed to read response body as bytes: %s", err.Error())
 	}
 
-	err = json.Unmarshal(responseBytes, &stations)
+	err = json.Unmarshal(responseBytes, &devices)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal response: %s,\ndue to: %s", string(responseBytes), err.Error())
 	}
 
-	return stations, nil
+	return devices, nil
 }

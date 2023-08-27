@@ -17,7 +17,7 @@ var Expects = testutils.Expects
 var Returns = testutils.Returns
 var method = expects.RequestMethod
 
-func TestThatGetStationsFailsIfResponseCodeIsNotOK(t *testing.T) {
+func TestThatGetDevicesgetDevicesFailsIfResponseCodeIsNotOK(t *testing.T) {
 	is := is.New(t)
 
 	s := testutils.NewMockServiceThat(
@@ -33,12 +33,12 @@ func TestThatGetStationsFailsIfResponseCodeIsNotOK(t *testing.T) {
 
 	mockApp := newMockApp(t, s.URL())
 
-	stn, err := mockApp.getStations()
+	stn, err := mockApp.getDevices()
 	is.True(err != nil)
 	is.True(stn == nil)
 }
 
-func TestThatGetStationsFailsIfReturnedStationDataIsIncorrect(t *testing.T) {
+func TestThatGetDevicesFailsIfReturnedStationDataIsIncorrect(t *testing.T) {
 	is := is.New(t)
 
 	s := testutils.NewMockServiceThat(
@@ -48,18 +48,18 @@ func TestThatGetStationsFailsIfReturnedStationDataIsIncorrect(t *testing.T) {
 		),
 		Returns(
 			response.Code(http.StatusOK),
-			response.Body([]byte(stationsBadResponse)),
+			response.Body([]byte(devicesBadResponse)),
 		),
 	)
 
 	mockApp := newMockApp(t, s.URL())
-	stn, err := mockApp.getStations()
+	dev, err := mockApp.getDevices()
 
 	is.True(err != nil)
-	is.True(stn == nil)
+	is.True(dev == nil)
 }
 
-func TestGetSensorDataFailsOnEmptyStationData(t *testing.T) {
+func TestGetDeviceDataFailsOnEmptyStationData(t *testing.T) {
 	is := is.New(t)
 
 	s := testutils.NewMockServiceThat(
@@ -74,11 +74,11 @@ func TestGetSensorDataFailsOnEmptyStationData(t *testing.T) {
 	)
 	mockApp := newMockApp(t, s.URL())
 
-	_, err := mockApp.getSensorData(domain.Station{})
+	_, err := mockApp.getDeviceData(domain.Device{})
 	is.True(err != nil)
 }
 
-func TestThatGetSensorDataFailsIfResponseCodeIsNotOK(t *testing.T) {
+func TestThatGetDeviceDataFailsIfResponseCodeIsNotOK(t *testing.T) {
 	is := is.New(t)
 
 	s := testutils.NewMockServiceThat(
@@ -93,12 +93,12 @@ func TestThatGetSensorDataFailsIfResponseCodeIsNotOK(t *testing.T) {
 	)
 	mockApp := newMockApp(t, s.URL())
 
-	stn := domain.Station{
-		UniqueId:    123,
-		StationName: "abc",
+	dev := domain.Device{
+		UniqueId:   123,
+		DeviceName: "abc",
 	}
 
-	result, err := mockApp.getSensorData(stn)
+	result, err := mockApp.getDeviceData(dev)
 	is.True(err != nil)
 	is.True(result == nil)
 }
@@ -117,12 +117,12 @@ func TestThatGetSensorDataReturnsAndMarshalsCorrectly(t *testing.T) {
 		),
 	)
 	mockApp := newMockApp(t, s.URL())
-	stn := domain.Station{
-		UniqueId:    123,
-		StationName: "abc",
+	dev := domain.Device{
+		UniqueId:   123,
+		DeviceName: "abc",
 	}
 
-	result, err := mockApp.getSensorData(stn)
+	result, err := mockApp.getDeviceData(dev)
 	is.NoErr(err)
 
 	_, err = json.MarshalIndent(result, "", "  ")
@@ -130,20 +130,197 @@ func TestThatGetSensorDataReturnsAndMarshalsCorrectly(t *testing.T) {
 }
 
 func newMockApp(t *testing.T, serverURL string) *integrationAcoem {
-	app := New(context.Background(), serverURL, "notarealID", "notarealkey", nil)
+	app := New(context.Background(), serverURL, "notreallyanaccesstoken", nil)
 	mockApp := app.(*integrationAcoem)
 
 	return mockApp
 }
 
-/*const stationsResponse string = `
-[{"UniqueId":888100,"StationType":"Gen2 Logger","StationName":"SUNDSVALL GEN2","SerialNumber":1336,"Firmware":null,"Imsi":null,"Latitude":62.388618,"Longitude":17.308968,"Altitude":null,"CustomerId":"CSUN105032030469"},{"UniqueId":1098100,"StationType":"Mini Gateway","StationName":"SUNDSVALL BERGSGATAN","SerialNumber":null,"Firmware":null,"Imsi":"089462048008002994526","Latitude":62.386485,"Longitude":17.303442,"Altitude":null,"CustomerId":"CSUN105032030469"}]
-`*/
-
-const stationsBadResponse string = `
+const devicesBadResponse string = `
 [{"UniqueId":888100,"StationType":"Gen2 Logger","StationName":"SUNDSVALL GEN2","SerialNumber":1336,"Firmware":null,"Imsi":null,"Latitude":62.388618,"Longitude":17.308968,"Altitude":null,"CustomerId":"CSUN105032030469"}{"UniqueId":1098100,"StationType":"Mini Gateway","StationName":"SUNDSVALL BERGSGATAN","SerialNumber":null,"Firmware":null,"Imsi":"089462048008002994526","Latitude":62.386485,"Longitude":17.303442,"Altitude":null,"CustomerId":"CSUN105032030469"}]
 `
 
 const acoemResponse string = `
-[{"TBTimestamp":"2021-10-12T11:15:00+00:00","TETimestamp":"2021-10-12T11:16:00+00:00","Latitude":62.388618,"Longitude":17.308968,"Altitude":null,"Channels":[{"SensorName":"Air Pressure","SensorLabel":"AIRPRES","Channel":9,"PreScaled":1008,"Scaled":1008,"UnitName":"Pressure (mbar)","Slope":1,"Offset":0,"Flags":["Valid"]},{"SensorName":"Humidity","SensorLabel":"HUM","Channel":8,"PreScaled":74.32,"Scaled":74.32,"UnitName":"Percent","Slope":1,"Offset":0,"Flags":["Valid"]},{"SensorName":"Nitric Oxide","SensorLabel":"NO","Channel":10,"PreScaled":2.679,"Scaled":2.679,"UnitName":"Parts Per Billion","Slope":1,"Offset":0,"Flags":["Valid"]},{"SensorName":"Nitrogen Dioxide","SensorLabel":"NO2","Channel":11,"PreScaled":4.126,"Scaled":4.126,"UnitName":"Parts Per Billion","Slope":1,"Offset":0,"Flags":["Valid"]},{"SensorName":"Nitrogen Oxides","SensorLabel":"NOx","Channel":12,"PreScaled":6805,"Scaled":6.805,"UnitName":"Parts Per Billion","Slope":1,"Offset":0,"Flags":["Valid"]},{"SensorName":"Particle Count","SensorLabel":"PARTICLE_COUNT","Channel":6,"PreScaled":8.142,"Scaled":8.142,"UnitName":"Particles per cm3","Slope":1,"Offset":0,"Flags":["Valid"]},{"SensorName":"Particulate Matter (PM 1)","SensorLabel":"PM1","Channel":1,"PreScaled":0.284,"Scaled":0.284,"UnitName":"Micrograms Per Cubic Meter","Slope":1,"Offset":0,"Flags":["Valid"]},{"SensorName":"Particulate Matter (PM 10)","SensorLabel":"PM10","Channel":4,"PreScaled":4.747,"Scaled":4.747,"UnitName":"Micrograms Per Cubic Meter","Slope":1,"Offset":0,"Flags":["Valid"]},{"SensorName":"Particulate Matter (PM 2.5)","SensorLabel":"PM2.5","Channel":2,"PreScaled":0.893,"Scaled":0.893,"UnitName":"Micrograms Per Cubic Meter","Slope":1,"Offset":0,"Flags":["Valid"]},{"SensorName":"PM 4","SensorLabel":"PM4","Channel":3,"PreScaled":1.478,"Scaled":1.478,"UnitName":"Micrograms Per Cubic Meter","Slope":1,"Offset":0,"Flags":["Valid"]},{"SensorName":"Temperature","SensorLabel":"TEMP","Channel":7,"PreScaled":9.273,"Scaled":9.273,"UnitName":"Celsius","Slope":1,"Offset":0,"Flags":["Valid"]},{"SensorName":"Total Suspended Particulate","SensorLabel":"TSP","Channel":5,"PreScaled":11.29,"Scaled":11.29,"UnitName":"Micrograms Per Cubic Meter","Slope":1,"Offset":0,"Flags":["Valid"]}]}]
+[
+  {
+    "Active": true,
+    "Channel": 9,
+    "Rate": 60,
+    "SensorLabel": "AIRPRES",
+    "SensorName": "Air Pressure",
+    "Type": "data",
+    "Unit": "mbar",
+    "UnitName": "Pressure (mbar)"
+  },
+  {
+    "Active": true,
+    "Channel": 8,
+    "Rate": 60,
+    "SensorLabel": "HUM",
+    "SensorName": "Humidity",
+    "Type": "data",
+    "Unit": "%",
+    "UnitName": "Percent"
+  },
+  {
+    "Active": true,
+    "Channel": 10,
+    "Rate": 60,
+    "SensorLabel": "NO",
+    "SensorName": "Nitric Oxide",
+    "Type": "data",
+    "Unit": "ppb",
+    "UnitName": "Parts Per Billion"
+  },
+  {
+    "Active": false,
+    "Channel": 30,
+    "Rate": 900,
+    "SensorLabel": "NO",
+    "SensorName": "Nitric Oxide",
+    "Type": "data",
+    "Unit": "ppb",
+    "UnitName": "Parts Per Billion"
+  },
+  {
+    "Active": true,
+    "Channel": 11,
+    "Rate": 60,
+    "SensorLabel": "NO2",
+    "SensorName": "Nitrogen Dioxide",
+    "Type": "data",
+    "Unit": "ppb",
+    "UnitName": "Parts Per Billion"
+  },
+  {
+    "Active": false,
+    "Channel": 12,
+    "Rate": 60,
+    "SensorLabel": "NO2",
+    "SensorName": "Nitrogen Dioxide",
+    "Type": "data",
+    "Unit": "ppb",
+    "UnitName": "Parts Per Billion"
+  },
+  {
+    "Active": false,
+    "Channel": 13,
+    "Rate": 60,
+    "SensorLabel": "NO2",
+    "SensorName": "Nitrogen Dioxide",
+    "Type": "data",
+    "Unit": "ppb",
+    "UnitName": "Parts Per Billion"
+  },
+  {
+    "Active": false,
+    "Channel": 31,
+    "Rate": 900,
+    "SensorLabel": "NO2",
+    "SensorName": "Nitrogen Dioxide",
+    "Type": "data",
+    "Unit": "ppb",
+    "UnitName": "Parts Per Billion"
+  },
+  {
+    "Active": false,
+    "Channel": 11,
+    "Rate": 60,
+    "SensorLabel": "NOx",
+    "SensorName": "Nitrogen Oxides",
+    "Type": "data",
+    "Unit": "ppb",
+    "UnitName": "Parts Per Billion"
+  },
+  {
+    "Active": true,
+    "Channel": 12,
+    "Rate": 60,
+    "SensorLabel": "NOx",
+    "SensorName": "Nitrogen Oxides",
+    "Type": "data",
+    "Unit": "ppb",
+    "UnitName": "Parts Per Billion"
+  },
+  {
+    "Active": false,
+    "Channel": 32,
+    "Rate": 900,
+    "SensorLabel": "NOx",
+    "SensorName": "Nitrogen Oxides",
+    "Type": "data",
+    "Unit": "ppb",
+    "UnitName": "Parts Per Billion"
+  },
+  {
+    "Active": true,
+    "Channel": 6,
+    "Rate": 60,
+    "SensorLabel": "PARTICLE_COUNT",
+    "SensorName": "Particle Count",
+    "Type": "data",
+    "Unit": "P/cm3",
+    "UnitName": "Particles per cm3"
+  },
+  {
+    "Active": true,
+    "Channel": 1,
+    "Rate": 60,
+    "SensorLabel": "PM1",
+    "SensorName": "Particulate Matter (PM 1)",
+    "Type": "data",
+    "Unit": "ug/m3",
+    "UnitName": "Micrograms Per Cubic Meter"
+  },
+  {
+    "Active": true,
+    "Channel": 4,
+    "Rate": 60,
+    "SensorLabel": "PM10",
+    "SensorName": "Particulate Matter (PM 10)",
+    "Type": "data",
+    "Unit": "ug/m3",
+    "UnitName": "Micrograms Per Cubic Meter"
+  },
+  {
+    "Active": true,
+    "Channel": 2,
+    "Rate": 60,
+    "SensorLabel": "PM2.5",
+    "SensorName": "Particulate Matter (PM 2.5)",
+    "Type": "data",
+    "Unit": "ug/m3",
+    "UnitName": "Micrograms Per Cubic Meter"
+  },
+  {
+    "Active": true,
+    "Channel": 3,
+    "Rate": 60,
+    "SensorLabel": "PM4",
+    "SensorName": "PM 4",
+    "Type": "data",
+    "Unit": "ug/m3",
+    "UnitName": "Micrograms Per Cubic Meter"
+  },
+  {
+    "Active": true,
+    "Channel": 7,
+    "Rate": 60,
+    "SensorLabel": "TEMP",
+    "SensorName": "Temperature",
+    "Type": "data",
+    "Unit": "C",
+    "UnitName": "Celsius"
+  },
+  {
+    "Active": true,
+    "Channel": 5,
+    "Rate": 60,
+    "SensorLabel": "TSP",
+    "SensorName": "Total Suspended Particulate",
+    "Type": "data",
+    "Unit": "ug/m3",
+    "UnitName": "Micrograms Per Cubic Meter"
+  }
+]
 `
