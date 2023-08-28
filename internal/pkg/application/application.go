@@ -50,10 +50,6 @@ func (i *integrationAcoem) CreateAirQualityObserved(ctx context.Context) error {
 	}
 
 	for _, dev := range devices {
-		/*
-			sensor labels need to be included in the request to the api in order to fetch data for a particular sensor on a device.
-			choosing to fetch the available sensors per device rather than hardcode in a list of available sensors on each device.
-		*/
 
 		sensorLabels, err := i.getSensorLabels(dev.UniqueId)
 		if err != nil {
@@ -147,16 +143,15 @@ func (i *integrationAcoem) getSensorLabels(deviceID int) (string, error) {
 		return "", fmt.Errorf("failed to unmarshal response body: %s", err.Error())
 	}
 
-	sensorLabels := []string{"$"}
+	sensorLabels := []string{}
 
 	for _, s := range sensors {
-		if s.Active {
-			sensorLabels = append(sensorLabels, s.SensorLabel, "+")
+		if s.Active && s.Type == "data" {
+			sensorLabels = append(sensorLabels, s.SensorLabel)
 		}
 	}
 
-	labels := strings.Join(sensorLabels, "")
-	labels = strings.TrimSuffix(labels, "+")
+	labels := strings.Join(sensorLabels, "+")
 
 	return labels, nil
 }
@@ -210,7 +205,7 @@ func (i *integrationAcoem) getDeviceData(device domain.Device, sensorLabels stri
 	}
 	deviceData := []domain.DeviceData{}
 
-	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/devicedata/%d/latest/1/1200/data/%s", i.baseUrl, device.UniqueId, sensorLabels), nil)
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/devicedata/%d/latest/1/300/data/%s", i.baseUrl, device.UniqueId, sensorLabels), nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %s", err.Error())
 	}

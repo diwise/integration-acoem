@@ -37,4 +37,5 @@ type Channel struct {
 type Sensor struct {
 	Active      bool   `json:"active"`
 	SensorLabel string `json:"sensorLabel"`
+	Type        string `json:"type"`
 }
