@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/diwise/context-broker/pkg/datamodels/fiware"
 	"github.com/diwise/context-broker/pkg/ngsild/client"
@@ -49,7 +50,18 @@ func (i *integrationAcoem) CreateAirQualityObserved(ctx context.Context) error {
 	}
 
 	for _, dev := range devices {
-		sensors, err := i.getDeviceData(dev)
+		/*
+			sensor labels need to be included in the request to the api in order to fetch data for a particular sensor on a device.
+			choosing to fetch the available sensors per device rather than hardcode in a list of available sensors on each device.
+		*/
+
+		sensorLabels, err := i.getSensorLabels(dev.UniqueId)
+		if err != nil {
+			logger.Error().Err(err).Msgf("failed to retrieve sensor labels for device %d", dev.UniqueId)
+			return err
+		}
+
+		sensors, err := i.getDeviceData(dev, sensorLabels)
 		if err != nil {
 			logger.Error().Err(err).Msg("failed to retrieve sensor data")
 			return err
@@ -61,11 +73,11 @@ func (i *integrationAcoem) CreateAirQualityObserved(ctx context.Context) error {
 
 		for _, sensor := range sensors {
 			decorators = append(decorators,
-				Location(sensor.Latitude, sensor.Longitude),
-				DateTime(properties.DateObserved, sensor.TBTimestamp),
+				Location(sensor.Location.Latitude, sensor.Location.Longitude),
+				DateTime(properties.DateObserved, sensor.Timestamp.Timestamp),
 			)
 
-			sensorReadings := createFragmentsFromSensorData(sensor.Channels, sensor.TBTimestamp)
+			sensorReadings := createFragmentsFromSensorData(sensor.Channels, sensor.Timestamp.Timestamp)
 
 			decorators = append(decorators, sensorReadings...)
 		}
@@ -101,6 +113,54 @@ func (i *integrationAcoem) CreateAirQualityObserved(ctx context.Context) error {
 	return nil
 }
 
+func (i *integrationAcoem) getSensorLabels(deviceID int) (string, error) {
+
+	client := http.DefaultClient
+
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/devices/setup/%d", i.baseUrl, deviceID), nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %s", err.Error())
+	}
+	req.Header.Add("Accept", "application/json")
+	req.Header.Add("Authorization", i.accessToken)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("request failed: %s", err.Error())
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("request failed, expected status code %d but got %d", http.StatusOK, resp.StatusCode)
+	}
+
+	defer resp.Body.Close()
+
+	sensors := []domain.Sensor{}
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response body: %s", err.Error())
+	}
+
+	err = json.Unmarshal(bodyBytes, &sensors)
+	if err != nil {
+		return "", fmt.Errorf("failed to unmarshal response body: %s", err.Error())
+	}
+
+	sensorLabels := []string{"$"}
+
+	for _, s := range sensors {
+		if s.Active {
+			sensorLabels = append(sensorLabels, s.SensorLabel, "+")
+		}
+	}
+
+	labels := strings.Join(sensorLabels, "")
+	labels = strings.TrimSuffix(labels, "+")
+
+	return labels, nil
+}
+
 var unitCodes map[string]string = map[string]string{
 	"Micrograms Per Cubic Meter": "GQ",
 	"Volts":                      "VLT",
@@ -134,7 +194,7 @@ func createFragmentsFromSensorData(sensors []domain.Channel, timestamp string) [
 		if ok {
 			readings = append(readings, Number(
 				name,
-				sensor.Scaled,
+				sensor.Scaled.Reading,
 				properties.UnitCode(unitCodes[sensor.UnitName]),
 				properties.ObservedAt(timestamp),
 			))
@@ -144,19 +204,20 @@ func createFragmentsFromSensorData(sensors []domain.Channel, timestamp string) [
 	return readings
 }
 
-func (i *integrationAcoem) getDeviceData(device domain.Device) ([]domain.DeviceData, error) {
-	if device.UniqueId == 0 || device.DeviceName == "" {
-		return nil, fmt.Errorf("cannot retrieve sensor data as no valid station ID has been provided")
+func (i *integrationAcoem) getDeviceData(device domain.Device, sensorLabels string) ([]domain.DeviceData, error) {
+	if device.UniqueId == 0 || device.DeviceName == "" || sensorLabels == "" {
+		return nil, fmt.Errorf("cannot retrieve sensor data as either station ID, device name, or sensor labels are empty")
 	}
 	deviceData := []domain.DeviceData{}
 
-	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/devices/setup/%d", i.baseUrl, device.UniqueId), nil)
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/devicedata/%d/latest/1/1200/data/%s", i.baseUrl, device.UniqueId, sensorLabels), nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %s", err.Error())
 	}
 
 	req.Header.Add("Accept", "application/json")
 	req.Header.Add("Authorization", i.accessToken)
+	req.Header.Add("TimeConvention", "TimeBeginning")
 
 	client := http.DefaultClient
 
