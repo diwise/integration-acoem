@@ -150,11 +150,11 @@ func (i *integrationAcoem) GetSensorLabels(deviceID int) (string, error) {
 		return "", fmt.Errorf("request failed: %s", err.Error())
 	}
 
+	defer resp.Body.Close()
+
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("request failed, expected status code %d but got %d", http.StatusOK, resp.StatusCode)
 	}
-
-	defer resp.Body.Close()
 
 	sensors := []domain.Sensor{}
 
