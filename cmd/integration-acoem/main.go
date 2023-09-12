@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 
 	"github.com/diwise/context-broker/pkg/ngsild/client"
 	"github.com/diwise/service-chassis/pkg/infrastructure/buildinfo"
@@ -11,7 +12,11 @@ import (
 	"github.com/diwise/integration-acoem/internal/pkg/application"
 )
 
-const serviceName string = "integration-acoem"
+const (
+	serviceName      string = "integration-acoem"
+	OutputTypeLwm2m  string = "lwm2m"
+	OutputTypeFiware string = "fiware"
+)
 
 func main() {
 	serviceVersion := buildinfo.SourceVersion()
@@ -19,13 +24,68 @@ func main() {
 	ctx, logger, cleanup := o11y.Init(context.Background(), serviceName, serviceVersion)
 	defer cleanup()
 
+	var outputType string
+
+	flag.StringVar(&outputType, "output", "", "-output=<lwm2m or fiware>")
+	flag.Parse()
+
 	baseUrl := env.GetVariableOrDie(logger, "ACOEM_BASEURL", "acoem base url")
 	accessToken := env.GetVariableOrDie(logger, "ACOEM_ACCESS_TOKEN", "acoem access token")
-	contextBrokerUrl := env.GetVariableOrDie(logger, "CONTEXT_BROKER_URL", "context broker url")
+	cipUrl := env.GetVariableOrDie(logger, "CONTEXT_BROKER_URL", "context broker url")
+	lwm2mUrl := env.GetVariableOrDefault(logger, "LWM2M_ENDPOINT_URL", "")
 
-	contextBroker := client.NewContextBrokerClient(contextBrokerUrl)
+	if outputType == OutputTypeLwm2m {
+		if lwm2mUrl == "" {
+			logger.Fatal().Msg("no URL to lwm2m endpoint specified using env. var LWM2M_ENDPOINT_URL")
+		}
+	}
 
-	a := application.New(ctx, baseUrl, accessToken, contextBroker)
+	if outputType == OutputTypeFiware {
+		if cipUrl == "" {
+			logger.Fatal().Msg("no URL to context broker specified using env. var CONTEXT_BROKER_URL")
+		}
+	}
 
-	a.CreateAirQualityObserved(ctx)
+	if outputType == "" {
+		if lwm2mUrl != "" {
+			outputType = OutputTypeLwm2m
+		} else if cipUrl != "" {
+			outputType = OutputTypeFiware
+		}
+	}
+
+	if outputType == "" {
+		logger.Fatal().Msg("no output type selected")
+	}
+
+	contextBroker := client.NewContextBrokerClient(cipUrl)
+
+	a := application.New(ctx, baseUrl, accessToken)
+
+	devices, err := a.GetDevices()
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to retrieve devices")
+	}
+
+	for _, d := range devices {
+
+		sensorLabels, err := a.GetSensorLabels(d.UniqueId)
+		if err != nil {
+			logger.Error().Err(err).Msgf("failed to retrieve sensor labels for device %d", d.UniqueId)
+		}
+
+		sensors, err := a.GetDeviceData(d, sensorLabels)
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to retrieve sensor data")
+		}
+
+		if outputType == OutputTypeFiware {
+			a.CreateOrUpdateAirQualityObserved(ctx, contextBroker, sensors, d.DeviceName, d.UniqueId)
+		}
+
+		if outputType == OutputTypeLwm2m {
+			a.CreateAndSendAirQualityAsLWM2M(ctx)
+		}
+	}
+
 }

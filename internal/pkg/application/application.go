@@ -21,95 +21,120 @@ import (
 )
 
 type IntegrationAcoem interface {
-	CreateAirQualityObserved(ctx context.Context) error
+	GetDevices() ([]domain.Device, error)
+	GetDeviceData(device domain.Device, sensorLabels string) ([]domain.DeviceData, error)
+	GetSensorLabels(deviceID int) (string, error)
+	CreateOrUpdateAirQualityObserved(ctx context.Context, cbClient client.ContextBrokerClient, sensors []domain.DeviceData, deviceName string, uniqueId int) error
+	CreateAndSendAirQualityAsLWM2M(ctx context.Context) error
 }
 
 type integrationAcoem struct {
 	baseUrl     string
 	accessToken string
-	cb          client.ContextBrokerClient
 }
 
-func New(ctx context.Context, baseUrl, accessToken string, cb client.ContextBrokerClient) IntegrationAcoem {
+func New(ctx context.Context, baseUrl, accessToken string) IntegrationAcoem {
 	return &integrationAcoem{
 		baseUrl:     baseUrl,
 		accessToken: accessToken,
-		cb:          cb,
 	}
 }
 
-func (i *integrationAcoem) CreateAirQualityObserved(ctx context.Context) error {
+func (i *integrationAcoem) CreateAndSendAirQualityAsLWM2M(ctx context.Context) error {
+	return nil
+}
+
+func (i *integrationAcoem) CreateOrUpdateAirQualityObserved(ctx context.Context, cbClient client.ContextBrokerClient, sensors []domain.DeviceData, deviceName string, uniqueId int) error {
 	logger := logging.GetFromContext(ctx)
 
 	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
 
-	devices, err := i.getDevices()
-	if err != nil {
-		logger.Error().Err(err).Msg("failed to retrieve devices")
-		return err
+	decorators := []entities.EntityDecoratorFunc{}
+
+	decorators = append(decorators, entities.DefaultContext(), Text("areaServed", deviceName))
+
+	for _, sensor := range sensors {
+		decorators = append(decorators,
+			Location(sensor.Location.Latitude, sensor.Location.Longitude),
+			DateTime(properties.DateObserved, sensor.Timestamp.Timestamp),
+		)
+
+		sensorReadings := createFragmentsFromSensorData(sensor.Channels, sensor.Timestamp.Timestamp)
+
+		decorators = append(decorators, sensorReadings...)
 	}
 
-	for _, dev := range devices {
+	fragment, err := entities.NewFragment(decorators...)
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to create entity fragments")
+	}
 
-		sensorLabels, err := i.getSensorLabels(dev.UniqueId)
-		if err != nil {
-			logger.Error().Err(err).Msgf("failed to retrieve sensor labels for device %d", dev.UniqueId)
-			return err
+	entityID := fiware.AirQualityObservedIDPrefix + strconv.Itoa(uniqueId)
+
+	_, err = cbClient.MergeEntity(ctx, entityID, fragment, headers)
+	if err != nil {
+		if !errors.Is(err, ngsierrors.ErrNotFound) {
+			logger.Error().Err(err).Msg("failed to merge entity")
 		}
 
-		sensors, err := i.getDeviceData(dev, sensorLabels)
+		entity, err := entities.New(entityID, fiware.AirQualityObservedTypeName, decorators...)
 		if err != nil {
-			logger.Error().Err(err).Msg("failed to retrieve sensor data")
-			return err
+			logger.Error().Err(err).Msg("failed to create new entity")
 		}
 
-		decorators := []entities.EntityDecoratorFunc{}
-
-		decorators = append(decorators, entities.DefaultContext(), Text("areaServed", dev.DeviceName))
-
-		for _, sensor := range sensors {
-			decorators = append(decorators,
-				Location(sensor.Location.Latitude, sensor.Location.Longitude),
-				DateTime(properties.DateObserved, sensor.Timestamp.Timestamp),
-			)
-
-			sensorReadings := createFragmentsFromSensorData(sensor.Channels, sensor.Timestamp.Timestamp)
-
-			decorators = append(decorators, sensorReadings...)
-		}
-
-		fragment, err := entities.NewFragment(decorators...)
+		_, err = cbClient.CreateEntity(ctx, entity, headers)
 		if err != nil {
-			logger.Error().Err(err).Msg("failed to create entity fragments")
-		}
-
-		entityID := fiware.AirQualityObservedIDPrefix + strconv.Itoa(dev.UniqueId)
-
-		_, err = i.cb.MergeEntity(ctx, entityID, fragment, headers)
-		if err != nil {
-			if !errors.Is(err, ngsierrors.ErrNotFound) {
-				logger.Error().Err(err).Msg("failed to merge entity")
-				continue
-			}
-
-			entity, err := entities.New(entityID, fiware.AirQualityObservedTypeName, decorators...)
-			if err != nil {
-				logger.Error().Err(err).Msg("failed to create new entity")
-				continue
-			}
-
-			_, err = i.cb.CreateEntity(ctx, entity, headers)
-			if err != nil {
-				logger.Error().Err(err).Msg("failed to post entity to context broker")
-				continue
-			}
+			logger.Error().Err(err).Msg("failed to post entity to context broker")
 		}
 	}
 
 	return nil
 }
 
-func (i *integrationAcoem) getSensorLabels(deviceID int) (string, error) {
+var unitCodes map[string]string = map[string]string{
+	"Micrograms Per Cubic Meter": "GQ",
+	"Volts":                      "VLT",
+	"Celsius":                    "CEL",
+	"Percent":                    "P1",
+	"Hectopascals":               "A97",
+	"Parts Per Billion":          "61",
+	"Pressure (mbar)":            "MBR",
+}
+
+var sensorNames map[string]string = map[string]string{
+	"Humidity":                    "relativeHumidity",
+	"Temperature":                 "temperature",
+	"Air Pressure":                "atmosphericPressure",
+	"Particulate Matter (PM 1)":   "PM1",
+	"PM 4":                        "PM4",
+	"Particulate Matter (PM 10)":  "PM10",
+	"Particulate Matter (PM 2.5)": "PM25",
+	"Total Suspended Particulate": "totalSuspendedParticulate",
+	"Voltage":                     "voltage",
+	"Nitric Oxide":                "NO",
+	"Nitrogen Dioxide":            "NO2",
+	"Nitrogen Oxides":             "NOx",
+}
+
+func createFragmentsFromSensorData(sensors []domain.Channel, timestamp string) []entities.EntityDecoratorFunc {
+	readings := []entities.EntityDecoratorFunc{}
+
+	for _, sensor := range sensors {
+		name, ok := sensorNames[sensor.SensorName]
+		if ok {
+			readings = append(readings, Number(
+				name,
+				sensor.Scaled.Reading,
+				properties.UnitCode(unitCodes[sensor.UnitName]),
+				properties.ObservedAt(timestamp),
+			))
+		}
+	}
+
+	return readings
+}
+
+func (i *integrationAcoem) GetSensorLabels(deviceID int) (string, error) {
 
 	client := http.DefaultClient
 
@@ -156,50 +181,7 @@ func (i *integrationAcoem) getSensorLabels(deviceID int) (string, error) {
 	return labels, nil
 }
 
-var unitCodes map[string]string = map[string]string{
-	"Micrograms Per Cubic Meter": "GQ",
-	"Volts":                      "VLT",
-	"Celsius":                    "CEL",
-	"Percent":                    "P1",
-	"Hectopascals":               "A97",
-	"Parts Per Billion":          "61",
-	"Pressure (mbar)":            "MBR",
-}
-
-var sensorNames map[string]string = map[string]string{
-	"Humidity":                    "relativeHumidity",
-	"Temperature":                 "temperature",
-	"Air Pressure":                "atmosphericPressure",
-	"Particulate Matter (PM 1)":   "PM1",
-	"PM 4":                        "PM4",
-	"Particulate Matter (PM 10)":  "PM10",
-	"Particulate Matter (PM 2.5)": "PM25",
-	"Total Suspended Particulate": "totalSuspendedParticulate",
-	"Voltage":                     "voltage",
-	"Nitric Oxide":                "NO",
-	"Nitrogen Dioxide":            "NO2",
-	"Nitrogen Oxides":             "NOx",
-}
-
-func createFragmentsFromSensorData(sensors []domain.Channel, timestamp string) []entities.EntityDecoratorFunc {
-	readings := []entities.EntityDecoratorFunc{}
-
-	for _, sensor := range sensors {
-		name, ok := sensorNames[sensor.SensorName]
-		if ok {
-			readings = append(readings, Number(
-				name,
-				sensor.Scaled.Reading,
-				properties.UnitCode(unitCodes[sensor.UnitName]),
-				properties.ObservedAt(timestamp),
-			))
-		}
-	}
-
-	return readings
-}
-
-func (i *integrationAcoem) getDeviceData(device domain.Device, sensorLabels string) ([]domain.DeviceData, error) {
+func (i *integrationAcoem) GetDeviceData(device domain.Device, sensorLabels string) ([]domain.DeviceData, error) {
 	if device.UniqueId == 0 || device.DeviceName == "" || sensorLabels == "" {
 		return nil, fmt.Errorf("cannot retrieve sensor data as either station ID, device name, or sensor labels are empty")
 	}
@@ -240,7 +222,7 @@ func (i *integrationAcoem) getDeviceData(device domain.Device, sensorLabels stri
 	return deviceData, nil
 }
 
-func (i *integrationAcoem) getDevices() ([]domain.Device, error) {
+func (i *integrationAcoem) GetDevices() ([]domain.Device, error) {
 	devices := []domain.Device{}
 
 	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/devices", i.baseUrl), nil)
