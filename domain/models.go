@@ -1,27 +1,41 @@
 package domain
 
-type Station struct {
-	UniqueId    int    `json:"uniqueID"`
-	StationName string `json:"stationName"`
+type Device struct {
+	UniqueId   int    `json:"uniqueID"`
+	DeviceName string `json:"deviceName"`
 }
 
-type StationData struct {
-	TBTimestamp string    `json:"tbtimestamp"`
-	TETimestamp string    `json:"tetimestamp"`
-	Latitude    float64   `json:"latitude"`
-	Longitude   float64   `json:"longitude"`
-	Altitude    float64   `json:"altitude"`
-	Channels    []Channel `json:"channels"`
+type DeviceData struct {
+	Timestamp struct {
+		Convention string `json:"convention"`
+		Timestamp  string `json:"timestamp"`
+	} `json:"timestamp"`
+	Location struct {
+		Altitude  float64 `json:"altitude"`
+		Longitude float64 `json:"longitude"`
+		Latitude  float64 `json:"latitude"`
+	} `json:"location"`
+	Channels []Channel `json:"channels"`
 }
 
 type Channel struct {
-	SensorName  string   `json:"sensorName"`
-	SensorLabel string   `json:"sensorLabel"`
-	Channel     int      `json:"channel"`
-	PreScaled   float64  `json:"preScaled"`
-	Scaled      float64  `json:"scaled"`
-	UnitName    string   `json:"unitName"`
-	Slope       int      `json:"slope"`
-	Offset      int      `json:"offset"`
-	Flags       []string `json:"flags"`
+	SensorName  string `json:"sensorName"`
+	SensorLabel string `json:"sensorLabel"`
+	Channel     int    `json:"channel"`
+	PreScaled   struct {
+		Reading float64 `json:"reading"`
+	} `json:"preScaled"`
+	Scaled struct {
+		Reading float64 `json:"reading"`
+	} `json:"scaled"`
+	UnitName string   `json:"unitName"`
+	Slope    int      `json:"slope"`
+	Offset   int      `json:"offset"`
+	Flags    []string `json:"flags"`
+}
+
+type Sensor struct {
+	Active      bool   `json:"active"`
+	SensorLabel string `json:"sensorLabel"`
+	Type        string `json:"type"`
 }

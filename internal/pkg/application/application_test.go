@@ -17,7 +17,7 @@ var Expects = testutils.Expects
 var Returns = testutils.Returns
 var method = expects.RequestMethod
 
-func TestThatGetStationsFailsIfResponseCodeIsNotOK(t *testing.T) {
+func TestThatGetDevicesFailsIfResponseCodeIsNotOK(t *testing.T) {
 	is := is.New(t)
 
 	s := testutils.NewMockServiceThat(
@@ -33,12 +33,12 @@ func TestThatGetStationsFailsIfResponseCodeIsNotOK(t *testing.T) {
 
 	mockApp := newMockApp(t, s.URL())
 
-	stn, err := mockApp.getStations()
+	stn, err := mockApp.getDevices()
 	is.True(err != nil)
 	is.True(stn == nil)
 }
 
-func TestThatGetStationsFailsIfReturnedStationDataIsIncorrect(t *testing.T) {
+func TestThatGetDevicesFailsIfReturnedDeviceDataIsIncorrect(t *testing.T) {
 	is := is.New(t)
 
 	s := testutils.NewMockServiceThat(
@@ -48,18 +48,18 @@ func TestThatGetStationsFailsIfReturnedStationDataIsIncorrect(t *testing.T) {
 		),
 		Returns(
 			response.Code(http.StatusOK),
-			response.Body([]byte(stationsBadResponse)),
+			response.Body([]byte(devicesBadResponse)),
 		),
 	)
 
 	mockApp := newMockApp(t, s.URL())
-	stn, err := mockApp.getStations()
+	dev, err := mockApp.getDevices()
 
 	is.True(err != nil)
-	is.True(stn == nil)
+	is.True(dev == nil)
 }
 
-func TestGetSensorDataFailsOnEmptyStationData(t *testing.T) {
+func TestGetDeviceDataFailsOnEmptyDeviceData(t *testing.T) {
 	is := is.New(t)
 
 	s := testutils.NewMockServiceThat(
@@ -74,11 +74,11 @@ func TestGetSensorDataFailsOnEmptyStationData(t *testing.T) {
 	)
 	mockApp := newMockApp(t, s.URL())
 
-	_, err := mockApp.getSensorData(domain.Station{})
+	_, err := mockApp.getDeviceData(domain.Device{}, "s")
 	is.True(err != nil)
 }
 
-func TestThatGetSensorDataFailsIfResponseCodeIsNotOK(t *testing.T) {
+func TestThatGetDeviceDataFailsIfResponseCodeIsNotOK(t *testing.T) {
 	is := is.New(t)
 
 	s := testutils.NewMockServiceThat(
@@ -93,12 +93,12 @@ func TestThatGetSensorDataFailsIfResponseCodeIsNotOK(t *testing.T) {
 	)
 	mockApp := newMockApp(t, s.URL())
 
-	stn := domain.Station{
-		UniqueId:    123,
-		StationName: "abc",
+	dev := domain.Device{
+		UniqueId:   123,
+		DeviceName: "abc",
 	}
 
-	result, err := mockApp.getSensorData(stn)
+	result, err := mockApp.getDeviceData(dev, "")
 	is.True(err != nil)
 	is.True(result == nil)
 }
@@ -113,37 +113,106 @@ func TestThatGetSensorDataReturnsAndMarshalsCorrectly(t *testing.T) {
 		),
 		Returns(
 			response.Code(http.StatusOK),
-			response.Body([]byte(acoemResponse)),
+			response.Body([]byte(deviceDataResponse)),
 		),
 	)
 	mockApp := newMockApp(t, s.URL())
-	stn := domain.Station{
-		UniqueId:    123,
-		StationName: "abc",
+	dev := domain.Device{
+		UniqueId:   123,
+		DeviceName: "abc",
 	}
 
-	result, err := mockApp.getSensorData(stn)
+	result, err := mockApp.getDeviceData(dev, "NO2+NOX")
 	is.NoErr(err)
 
-	_, err = json.MarshalIndent(result, "", "  ")
+	data, err := json.Marshal(result)
 	is.NoErr(err)
+
+	expectation := `[{"timestamp":{"convention":"TimeBeginning","timestamp":"2023-08-27T22:08:00+00:00"},"location":{"altitude":0,"longitude":17.308968,"latitude":62.388618},"channels":[{"sensorName":"Nitrogen Dioxide","sensorLabel":"NO2","channel":11,"preScaled":{"reading":3.888},"scaled":{"reading":3.888},"unitName":"Parts Per Billion","slope":1,"offset":0,"flags":null},{"sensorName":"Nitrogen Oxides","sensorLabel":"NOx","channel":12,"preScaled":{"reading":5.421},"scaled":{"reading":5.421},"unitName":"Parts Per Billion","slope":1,"offset":0,"flags":null}]}]`
+	is.Equal(expectation, string(data))
 }
 
 func newMockApp(t *testing.T, serverURL string) *integrationAcoem {
-	app := New(context.Background(), serverURL, "notarealID", "notarealkey", nil)
+	app := New(context.Background(), serverURL, "notreallyanaccesstoken", nil)
 	mockApp := app.(*integrationAcoem)
 
 	return mockApp
 }
 
-/*const stationsResponse string = `
-[{"UniqueId":888100,"StationType":"Gen2 Logger","StationName":"SUNDSVALL GEN2","SerialNumber":1336,"Firmware":null,"Imsi":null,"Latitude":62.388618,"Longitude":17.308968,"Altitude":null,"CustomerId":"CSUN105032030469"},{"UniqueId":1098100,"StationType":"Mini Gateway","StationName":"SUNDSVALL BERGSGATAN","SerialNumber":null,"Firmware":null,"Imsi":"089462048008002994526","Latitude":62.386485,"Longitude":17.303442,"Altitude":null,"CustomerId":"CSUN105032030469"}]
-`*/
+const devicesBadResponse string = `[
+	{
+	  "Altitude": null,
+	  "Customer": "Sundsvall",
+	  "DeviceName": "/////",
+	  "DeviceType": "Gen2 Logger",
+	  "Firmware": "1.138",
+	  "Imsi": null,
+	  "LastConnection": "2023-08-28T00:23:42+00:00",
+	  "Latitude": 62.388618,
+	  "Longitude": 17.308968,
+	  "SerialNumber": 1336,
+	  "UniqueId": 888100
+	}
+	{
+	}
+  ]`
 
-const stationsBadResponse string = `
-[{"UniqueId":888100,"StationType":"Gen2 Logger","StationName":"SUNDSVALL GEN2","SerialNumber":1336,"Firmware":null,"Imsi":null,"Latitude":62.388618,"Longitude":17.308968,"Altitude":null,"CustomerId":"CSUN105032030469"}{"UniqueId":1098100,"StationType":"Mini Gateway","StationName":"SUNDSVALL BERGSGATAN","SerialNumber":null,"Firmware":null,"Imsi":"089462048008002994526","Latitude":62.386485,"Longitude":17.303442,"Altitude":null,"CustomerId":"CSUN105032030469"}]
-`
-
-const acoemResponse string = `
-[{"TBTimestamp":"2021-10-12T11:15:00+00:00","TETimestamp":"2021-10-12T11:16:00+00:00","Latitude":62.388618,"Longitude":17.308968,"Altitude":null,"Channels":[{"SensorName":"Air Pressure","SensorLabel":"AIRPRES","Channel":9,"PreScaled":1008,"Scaled":1008,"UnitName":"Pressure (mbar)","Slope":1,"Offset":0,"Flags":["Valid"]},{"SensorName":"Humidity","SensorLabel":"HUM","Channel":8,"PreScaled":74.32,"Scaled":74.32,"UnitName":"Percent","Slope":1,"Offset":0,"Flags":["Valid"]},{"SensorName":"Nitric Oxide","SensorLabel":"NO","Channel":10,"PreScaled":2.679,"Scaled":2.679,"UnitName":"Parts Per Billion","Slope":1,"Offset":0,"Flags":["Valid"]},{"SensorName":"Nitrogen Dioxide","SensorLabel":"NO2","Channel":11,"PreScaled":4.126,"Scaled":4.126,"UnitName":"Parts Per Billion","Slope":1,"Offset":0,"Flags":["Valid"]},{"SensorName":"Nitrogen Oxides","SensorLabel":"NOx","Channel":12,"PreScaled":6805,"Scaled":6.805,"UnitName":"Parts Per Billion","Slope":1,"Offset":0,"Flags":["Valid"]},{"SensorName":"Particle Count","SensorLabel":"PARTICLE_COUNT","Channel":6,"PreScaled":8.142,"Scaled":8.142,"UnitName":"Particles per cm3","Slope":1,"Offset":0,"Flags":["Valid"]},{"SensorName":"Particulate Matter (PM 1)","SensorLabel":"PM1","Channel":1,"PreScaled":0.284,"Scaled":0.284,"UnitName":"Micrograms Per Cubic Meter","Slope":1,"Offset":0,"Flags":["Valid"]},{"SensorName":"Particulate Matter (PM 10)","SensorLabel":"PM10","Channel":4,"PreScaled":4.747,"Scaled":4.747,"UnitName":"Micrograms Per Cubic Meter","Slope":1,"Offset":0,"Flags":["Valid"]},{"SensorName":"Particulate Matter (PM 2.5)","SensorLabel":"PM2.5","Channel":2,"PreScaled":0.893,"Scaled":0.893,"UnitName":"Micrograms Per Cubic Meter","Slope":1,"Offset":0,"Flags":["Valid"]},{"SensorName":"PM 4","SensorLabel":"PM4","Channel":3,"PreScaled":1.478,"Scaled":1.478,"UnitName":"Micrograms Per Cubic Meter","Slope":1,"Offset":0,"Flags":["Valid"]},{"SensorName":"Temperature","SensorLabel":"TEMP","Channel":7,"PreScaled":9.273,"Scaled":9.273,"UnitName":"Celsius","Slope":1,"Offset":0,"Flags":["Valid"]},{"SensorName":"Total Suspended Particulate","SensorLabel":"TSP","Channel":5,"PreScaled":11.29,"Scaled":11.29,"UnitName":"Micrograms Per Cubic Meter","Slope":1,"Offset":0,"Flags":["Valid"]}]}]
+const deviceDataResponse string = `
+[
+  {
+    "Channels": [
+      {
+        "Channel": 11,
+        "DataRate": 60,
+        "Offset": 0,
+        "PreScaled": {
+          "Flags": null,
+          "Reading": 3.888,
+          "ValidPercentage": 100
+        },
+        "RedactedPercentage": 0,
+        "Scaled": {
+          "Flags": null,
+          "Reading": 3.888,
+          "ValidPercentage": 100
+        },
+        "SensorLabel": "NO2",
+        "SensorName": "Nitrogen Dioxide",
+        "Slope": 1,
+        "UniqueId": 888100,
+        "UnitName": "Parts Per Billion"
+      },
+      {
+        "Channel": 12,
+        "DataRate": 60,
+        "Offset": 0,
+        "PreScaled": {
+          "Flags": null,
+          "Reading": 5.421,
+          "ValidPercentage": 100
+        },
+        "RedactedPercentage": 0,
+        "Scaled": {
+          "Flags": null,
+          "Reading": 5.421,
+          "ValidPercentage": 100
+        },
+        "SensorLabel": "NOx",
+        "SensorName": "Nitrogen Oxides",
+        "Slope": 1,
+        "UniqueId": 888100,
+        "UnitName": "Parts Per Billion"
+      }
+    ],
+    "Location": {
+      "Altitude": null,
+      "Latitude": 62.388618,
+      "Longitude": 17.308968
+    },
+    "Timestamp": {
+      "Convention": "TimeBeginning",
+      "Timestamp": "2023-08-27T22:08:00+00:00"
+    }
+  }
+]
 `

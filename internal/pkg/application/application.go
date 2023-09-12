@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/diwise/context-broker/pkg/datamodels/fiware"
 	"github.com/diwise/context-broker/pkg/ngsild/client"
@@ -24,18 +25,16 @@ type IntegrationAcoem interface {
 }
 
 type integrationAcoem struct {
-	baseUrl    string
-	accountID  string
-	accountKey string
-	cb         client.ContextBrokerClient
+	baseUrl     string
+	accessToken string
+	cb          client.ContextBrokerClient
 }
 
-func New(ctx context.Context, baseUrl, accountID, accountKey string, cb client.ContextBrokerClient) IntegrationAcoem {
+func New(ctx context.Context, baseUrl, accessToken string, cb client.ContextBrokerClient) IntegrationAcoem {
 	return &integrationAcoem{
-		baseUrl:    baseUrl,
-		accountID:  accountID,
-		accountKey: accountKey,
-		cb:         cb,
+		baseUrl:     baseUrl,
+		accessToken: accessToken,
+		cb:          cb,
 	}
 }
 
@@ -44,14 +43,21 @@ func (i *integrationAcoem) CreateAirQualityObserved(ctx context.Context) error {
 
 	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
 
-	stations, err := i.getStations()
+	devices, err := i.getDevices()
 	if err != nil {
-		logger.Error().Err(err).Msg("failed to retrieve stations")
+		logger.Error().Err(err).Msg("failed to retrieve devices")
 		return err
 	}
 
-	for _, stn := range stations {
-		sensors, err := i.getSensorData(stn)
+	for _, dev := range devices {
+
+		sensorLabels, err := i.getSensorLabels(dev.UniqueId)
+		if err != nil {
+			logger.Error().Err(err).Msgf("failed to retrieve sensor labels for device %d", dev.UniqueId)
+			return err
+		}
+
+		sensors, err := i.getDeviceData(dev, sensorLabels)
 		if err != nil {
 			logger.Error().Err(err).Msg("failed to retrieve sensor data")
 			return err
@@ -59,15 +65,15 @@ func (i *integrationAcoem) CreateAirQualityObserved(ctx context.Context) error {
 
 		decorators := []entities.EntityDecoratorFunc{}
 
-		decorators = append(decorators, entities.DefaultContext(), Text("areaServed", stn.StationName))
+		decorators = append(decorators, entities.DefaultContext(), Text("areaServed", dev.DeviceName))
 
 		for _, sensor := range sensors {
 			decorators = append(decorators,
-				Location(sensor.Latitude, sensor.Longitude),
-				DateTime(properties.DateObserved, sensor.TBTimestamp),
+				Location(sensor.Location.Latitude, sensor.Location.Longitude),
+				DateTime(properties.DateObserved, sensor.Timestamp.Timestamp),
 			)
 
-			sensorReadings := createFragmentsFromSensorData(sensor.Channels, sensor.TBTimestamp)
+			sensorReadings := createFragmentsFromSensorData(sensor.Channels, sensor.Timestamp.Timestamp)
 
 			decorators = append(decorators, sensorReadings...)
 		}
@@ -77,7 +83,7 @@ func (i *integrationAcoem) CreateAirQualityObserved(ctx context.Context) error {
 			logger.Error().Err(err).Msg("failed to create entity fragments")
 		}
 
-		entityID := fiware.AirQualityObservedIDPrefix + strconv.Itoa(stn.UniqueId)
+		entityID := fiware.AirQualityObservedIDPrefix + strconv.Itoa(dev.UniqueId)
 
 		_, err = i.cb.MergeEntity(ctx, entityID, fragment, headers)
 		if err != nil {
@@ -101,6 +107,53 @@ func (i *integrationAcoem) CreateAirQualityObserved(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (i *integrationAcoem) getSensorLabels(deviceID int) (string, error) {
+
+	client := http.DefaultClient
+
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/devices/setup/%d", i.baseUrl, deviceID), nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %s", err.Error())
+	}
+	req.Header.Add("Accept", "application/json")
+	req.Header.Add("Authorization", i.accessToken)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("request failed: %s", err.Error())
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("request failed, expected status code %d but got %d", http.StatusOK, resp.StatusCode)
+	}
+
+	sensors := []domain.Sensor{}
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response body: %s", err.Error())
+	}
+
+	err = json.Unmarshal(bodyBytes, &sensors)
+	if err != nil {
+		return "", fmt.Errorf("failed to unmarshal response body: %s", err.Error())
+	}
+
+	sensorLabels := []string{}
+
+	for _, s := range sensors {
+		if s.Active && s.Type == "data" {
+			sensorLabels = append(sensorLabels, s.SensorLabel)
+		}
+	}
+
+	labels := strings.Join(sensorLabels, "+")
+
+	return labels, nil
 }
 
 var unitCodes map[string]string = map[string]string{
@@ -136,7 +189,7 @@ func createFragmentsFromSensorData(sensors []domain.Channel, timestamp string) [
 		if ok {
 			readings = append(readings, Number(
 				name,
-				sensor.Scaled,
+				sensor.Scaled.Reading,
 				properties.UnitCode(unitCodes[sensor.UnitName]),
 				properties.ObservedAt(timestamp),
 			))
@@ -146,15 +199,26 @@ func createFragmentsFromSensorData(sensors []domain.Channel, timestamp string) [
 	return readings
 }
 
-func (i *integrationAcoem) getSensorData(station domain.Station) ([]domain.StationData, error) {
-	if station.UniqueId == 0 || station.StationName == "" {
-		return nil, fmt.Errorf("cannot retrieve sensor data as no valid station ID has been provided")
+func (i *integrationAcoem) getDeviceData(device domain.Device, sensorLabels string) ([]domain.DeviceData, error) {
+	if device.UniqueId == 0 || device.DeviceName == "" || sensorLabels == "" {
+		return nil, fmt.Errorf("cannot retrieve sensor data as either station ID, device name, or sensor labels are empty")
 	}
-	stationData := []domain.StationData{}
+	deviceData := []domain.DeviceData{}
 
-	resp, err := http.Get(fmt.Sprintf("%s/3.5/GET/%s/%s/stationdata/latest/2/%d", i.baseUrl, i.accountID, i.accountKey, station.UniqueId))
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/devicedata/%d/latest/1/300/data/%s", i.baseUrl, device.UniqueId, sensorLabels), nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve list of stations: %s", err.Error())
+		return nil, fmt.Errorf("failed to create request: %s", err.Error())
+	}
+
+	req.Header.Add("Accept", "application/json")
+	req.Header.Add("Authorization", i.accessToken)
+	req.Header.Add("TimeConvention", "TimeBeginning")
+
+	client := http.DefaultClient
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve sensor data: %s", err.Error())
 	}
 
 	defer resp.Body.Close()
@@ -168,20 +232,30 @@ func (i *integrationAcoem) getSensorData(station domain.Station) ([]domain.Stati
 		return nil, fmt.Errorf("failed to read response body as bytes: %s", err.Error())
 	}
 
-	err = json.Unmarshal(respBytes, &stationData)
+	err = json.Unmarshal(respBytes, &deviceData)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal json data: %s", err.Error())
 	}
 
-	return stationData, nil
+	return deviceData, nil
 }
 
-func (i *integrationAcoem) getStations() ([]domain.Station, error) {
-	stations := []domain.Station{}
+func (i *integrationAcoem) getDevices() ([]domain.Device, error) {
+	devices := []domain.Device{}
 
-	response, err := http.Get(fmt.Sprintf("%s/3.5/GET/%s/%s/stations", i.baseUrl, i.accountID, i.accountKey))
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/devices", i.baseUrl), nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve list of stations: %s", err.Error())
+		return nil, fmt.Errorf("failed to create request: %s", err.Error())
+	}
+
+	req.Header.Add("Accept", "application/json")
+	req.Header.Add("Authorization", i.accessToken)
+
+	client := http.DefaultClient
+
+	response, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve list of devices: %s", err.Error())
 	}
 
 	defer response.Body.Close()
@@ -195,10 +269,10 @@ func (i *integrationAcoem) getStations() ([]domain.Station, error) {
 		return nil, fmt.Errorf("failed to read response body as bytes: %s", err.Error())
 	}
 
-	err = json.Unmarshal(responseBytes, &stations)
+	err = json.Unmarshal(responseBytes, &devices)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal response: %s,\ndue to: %s", string(responseBytes), err.Error())
 	}
 
-	return stations, nil
+	return devices, nil
 }
