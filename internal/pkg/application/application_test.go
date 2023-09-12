@@ -17,7 +17,7 @@ var Expects = testutils.Expects
 var Returns = testutils.Returns
 var method = expects.RequestMethod
 
-func TestThatGetDevicesgetDevicesFailsIfResponseCodeIsNotOK(t *testing.T) {
+func TestThatGetDevicesFailsIfResponseCodeIsNotOK(t *testing.T) {
 	is := is.New(t)
 
 	s := testutils.NewMockServiceThat(
@@ -38,7 +38,7 @@ func TestThatGetDevicesgetDevicesFailsIfResponseCodeIsNotOK(t *testing.T) {
 	is.True(stn == nil)
 }
 
-func TestThatGetDevicesFailsIfReturnedStationDataIsIncorrect(t *testing.T) {
+func TestThatGetDevicesFailsIfReturnedDeviceDataIsIncorrect(t *testing.T) {
 	is := is.New(t)
 
 	s := testutils.NewMockServiceThat(
@@ -59,7 +59,7 @@ func TestThatGetDevicesFailsIfReturnedStationDataIsIncorrect(t *testing.T) {
 	is.True(dev == nil)
 }
 
-func TestGetDeviceDataFailsOnEmptyStationData(t *testing.T) {
+func TestGetDeviceDataFailsOnEmptyDeviceData(t *testing.T) {
 	is := is.New(t)
 
 	s := testutils.NewMockServiceThat(
@@ -125,8 +125,11 @@ func TestThatGetSensorDataReturnsAndMarshalsCorrectly(t *testing.T) {
 	result, err := mockApp.getDeviceData(dev, "$NO2+NOX")
 	is.NoErr(err)
 
-	_, err = json.MarshalIndent(result, "", "  ")
+	data, err := json.Marshal(result)
 	is.NoErr(err)
+
+	expectation := `[{"timestamp":{"convention":"TimeBeginning","timestamp":"2023-08-27T22:08:00+00:00"},"location":{"altitude":0,"longitude":17.308968,"latitude":62.388618},"channels":[{"sensorName":"Nitrogen Dioxide","sensorLabel":"NO2","channel":11,"preScaled":{"reading":3.888},"scaled":{"reading":3.888},"unitName":"Parts Per Billion","slope":1,"offset":0,"flags":null},{"sensorName":"Nitrogen Oxides","sensorLabel":"NOx","channel":12,"preScaled":{"reading":5.421},"scaled":{"reading":5.421},"unitName":"Parts Per Billion","slope":1,"offset":0,"flags":null}]}]`
+	is.Equal(expectation, string(data))
 }
 
 func newMockApp(t *testing.T, serverURL string) *integrationAcoem {
@@ -140,7 +143,7 @@ const devicesBadResponse string = `[
 	{
 	  "Altitude": null,
 	  "Customer": "Sundsvall",
-	  "DeviceName": "Sundsvall Gen2",
+	  "DeviceName": "/////",
 	  "DeviceType": "Gen2 Logger",
 	  "Firmware": "1.138",
 	  "Imsi": null,
@@ -151,17 +154,6 @@ const devicesBadResponse string = `[
 	  "UniqueId": 888100
 	}
 	{
-	  "Altitude": null,
-	  "Customer": "Sundsvall",
-	  "DeviceName": "Sundsvall Bergsgatan",
-	  "DeviceType": "Mini Gateway",
-	  "Firmware": "1.00",
-	  "Imsi": 89462048008003000000,
-	  "LastConnection": "2023-08-28T00:23:14+00:00",
-	  "Latitude": 62.386485,
-	  "Longitude": 17.303442,
-	  "SerialNumber": 105,
-	  "UniqueId": 1098100
 	}
   ]`
 
