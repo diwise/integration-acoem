@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/diwise/integration-cip-havochvatten/internal/application/models"
 	"github.com/diwise/service-chassis/pkg/infrastructure/env"
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/tracing"
@@ -26,47 +25,44 @@ func init() {
 	tlsSkipVerify = env.GetVariableOrDefault(zerolog.Logger{}, "TLS_SKIP_VERIFY", "0") == "1"
 }
 
-var tracer = otel.Tracer("integration-cip-havochvatten/lwm2m")
+var tracer = otel.Tracer("integration-acoem/lwm2m")
 
 const (
+	AirQualityURN  string = "urn:oma:lwm2m:ext:3428"
+	HumidityURN    string = "urn:oma:lwm2m:ext:3304"
 	TemperatureURN string = "urn:oma:lwm2m:ext:3303"
 )
 
-func CreateTemperatures(ctx context.Context, temperatures []models.Temperature, url string) error {
+func CreateTemperature(ctx context.Context, temp float64, date time.Time, uniqueId, url string) error {
 	logger := logging.GetFromContext(ctx)
 
 	var errs []error
 
-	for _, t := range temperatures {
-		log := logger.With().
-			Str("nutsCode", t.NutsCode).
-			Str("device_id", t.InternalID).Logger()
+	log := logger.With().
+		Str("device_id", uniqueId).Logger()
 
-		pack, err := temperature(ctx, t.InternalID, t)
-		if err != nil {
-			log.Error().Err(err).Msg("unable to create lwm2m temperature object")
-			continue
-		}
+	pack, err := temperature(ctx, uniqueId, temp, date)
+	if err != nil {
+		log.Error().Err(err).Msg("unable to create lwm2m temperature object")
+	}
 
-		log.Info().Msgf("sending lwm2m pack for %s", t.Date.Format(time.RFC3339))
+	log.Info().Msgf("sending lwm2m pack for %s", date.Format(time.RFC3339))
 
-		err = send(ctx, url, pack)
-		if err != nil {
-			log.Error().Err(err).Msg("unable to POST lwm2m temperature")
-			errs = append(errs, err)
-			continue
-		}
+	err = send(ctx, url, pack)
+	if err != nil {
+		log.Error().Err(err).Msg("unable to POST lwm2m temperature")
+		errs = append(errs, err)
 	}
 
 	return errors.Join(errs...)
 }
 
-func temperature(ctx context.Context, deviceID string, t models.Temperature) (senml.Pack, error) {
+func temperature(ctx context.Context, deviceID string, temp float64, date time.Time) (senml.Pack, error) {
 	SensorValue := func(v float64, t time.Time) SenMLDecoratorFunc {
 		return Value("5700", v, t, senml.UnitCelsius)
 	}
 
-	pack := NewSenMLPack(deviceID, TemperatureURN, t.Date, SensorValue(t.Temp, t.Date))
+	pack := NewSenMLPack(deviceID, TemperatureURN, date, SensorValue(temp, date))
 
 	return pack, nil
 }
