@@ -122,7 +122,7 @@ func TestThatGetSensorDataReturnsAndMarshalsCorrectly(t *testing.T) {
 		DeviceName: "abc",
 	}
 
-	result, err := mockApp.getDeviceData(dev, "$NO2+NOX")
+	result, err := mockApp.getDeviceData(dev, "NO2+NOX")
 	is.NoErr(err)
 
 	data, err := json.Marshal(result)
