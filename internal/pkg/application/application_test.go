@@ -33,7 +33,7 @@ func TestThatGetDevicesFailsIfResponseCodeIsNotOK(t *testing.T) {
 
 	mockApp := newMockApp(t, s.URL())
 
-	stn, err := mockApp.getDevices()
+	stn, err := mockApp.getDevices(context.Background())
 	is.True(err != nil)
 	is.True(stn == nil)
 }
@@ -53,7 +53,7 @@ func TestThatGetDevicesFailsIfReturnedDeviceDataIsIncorrect(t *testing.T) {
 	)
 
 	mockApp := newMockApp(t, s.URL())
-	dev, err := mockApp.getDevices()
+	dev, err := mockApp.getDevices(context.Background())
 
 	is.True(err != nil)
 	is.True(dev == nil)
@@ -74,7 +74,7 @@ func TestGetDeviceDataFailsOnEmptyDeviceData(t *testing.T) {
 	)
 	mockApp := newMockApp(t, s.URL())
 
-	_, err := mockApp.getDeviceData(domain.Device{}, "s")
+	_, err := mockApp.getDeviceData(context.Background(), domain.Device{}, "s")
 	is.True(err != nil)
 }
 
@@ -98,7 +98,7 @@ func TestThatGetDeviceDataFailsIfResponseCodeIsNotOK(t *testing.T) {
 		DeviceName: "abc",
 	}
 
-	result, err := mockApp.getDeviceData(dev, "")
+	result, err := mockApp.getDeviceData(context.Background(), dev, "")
 	is.True(err != nil)
 	is.True(result == nil)
 }
@@ -122,7 +122,7 @@ func TestThatGetSensorDataReturnsAndMarshalsCorrectly(t *testing.T) {
 		DeviceName: "abc",
 	}
 
-	result, err := mockApp.getDeviceData(dev, "NO2+NOX")
+	result, err := mockApp.getDeviceData(context.Background(), dev, "NO2+NOX")
 	is.NoErr(err)
 
 	data, err := json.Marshal(result)
