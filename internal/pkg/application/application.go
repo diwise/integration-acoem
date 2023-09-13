@@ -57,6 +57,8 @@ func (i *integrationAcoem) CreateAirQualityObserved(ctx context.Context) error {
 		return err
 	}
 
+	logger.Info().Msgf("retrieved %d devices from acoem", len(devices))
+
 	for _, dev := range devices {
 
 		sensorLabels, err := i.getSensorLabels(dev.UniqueId)
@@ -64,6 +66,8 @@ func (i *integrationAcoem) CreateAirQualityObserved(ctx context.Context) error {
 			logger.Error().Err(err).Msgf("failed to retrieve sensor labels for device %d", dev.UniqueId)
 			return err
 		}
+
+		logger.Info().Msgf("retrieving data for %s from %d", sensorLabels, dev.UniqueId)
 
 		sensors, err := i.getDeviceData(dev, sensorLabels)
 		if err != nil {
@@ -111,6 +115,10 @@ func (i *integrationAcoem) CreateAirQualityObserved(ctx context.Context) error {
 				logger.Error().Err(err).Msg("failed to post entity to context broker")
 				continue
 			}
+
+			logger.Info().Msgf("created entity %s", entityID)
+		} else {
+			logger.Info().Msgf("updated entity %s", entityID)
 		}
 	}
 
