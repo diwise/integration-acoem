@@ -14,11 +14,16 @@ import (
 	"github.com/diwise/context-broker/pkg/datamodels/fiware"
 	"github.com/diwise/context-broker/pkg/ngsild/client"
 	ngsierrors "github.com/diwise/context-broker/pkg/ngsild/errors"
+	"github.com/diwise/context-broker/pkg/ngsild/types"
 	"github.com/diwise/context-broker/pkg/ngsild/types/entities"
 	. "github.com/diwise/context-broker/pkg/ngsild/types/entities/decorators"
 	"github.com/diwise/context-broker/pkg/ngsild/types/properties"
 	"github.com/diwise/integration-acoem/domain"
+	"github.com/diwise/service-chassis/pkg/infrastructure/o11y"
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
+	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/tracing"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel"
 )
 
 type IntegrationAcoem interface {
@@ -30,6 +35,8 @@ type integrationAcoem struct {
 	accessToken string
 	cb          client.ContextBrokerClient
 }
+
+var tracer = otel.Tracer("integration-acoem/app")
 
 func New(ctx context.Context, baseUrl, accountID, accountKey string, cb client.ContextBrokerClient) IntegrationAcoem {
 	accessToken := fmt.Sprintf(
@@ -47,11 +54,18 @@ func New(ctx context.Context, baseUrl, accountID, accountKey string, cb client.C
 }
 
 func (i *integrationAcoem) CreateAirQualityObserved(ctx context.Context) error {
-	logger := logging.GetFromContext(ctx)
+	var err error
+
+	_, span := tracer.Start(ctx, "create-air-qualities")
+	defer func() { tracing.RecordAnyErrorAndEndSpan(err, span) }()
+
+	_, ctx, logger := o11y.AddTraceIDToLoggerAndStoreInContext(span, logging.GetFromContext(ctx), ctx)
 
 	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
 
-	devices, err := i.getDevices()
+	var devices []domain.Device
+
+	devices, err = i.getDevices(ctx)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to retrieve devices")
 		return err
@@ -59,9 +73,12 @@ func (i *integrationAcoem) CreateAirQualityObserved(ctx context.Context) error {
 
 	logger.Info().Msgf("retrieved %d devices from acoem", len(devices))
 
+	var sensorLabels string
+	var sensors []domain.DeviceData
+
 	for _, dev := range devices {
 
-		sensorLabels, err := i.getSensorLabels(dev.UniqueId)
+		sensorLabels, err = i.getSensorLabels(ctx, dev.UniqueId)
 		if err != nil {
 			logger.Error().Err(err).Msgf("failed to retrieve sensor labels for device %d", dev.UniqueId)
 			return err
@@ -69,7 +86,7 @@ func (i *integrationAcoem) CreateAirQualityObserved(ctx context.Context) error {
 
 		logger.Info().Msgf("retrieving data for %s from %d", sensorLabels, dev.UniqueId)
 
-		sensors, err := i.getDeviceData(dev, sensorLabels)
+		sensors, err = i.getDeviceData(ctx, dev, sensorLabels)
 		if err != nil {
 			logger.Error().Err(err).Msg("failed to retrieve sensor data")
 			return err
@@ -90,7 +107,8 @@ func (i *integrationAcoem) CreateAirQualityObserved(ctx context.Context) error {
 			decorators = append(decorators, sensorReadings...)
 		}
 
-		fragment, err := entities.NewFragment(decorators...)
+		var fragment types.EntityFragment
+		fragment, err = entities.NewFragment(decorators...)
 		if err != nil {
 			logger.Error().Err(err).Msg("failed to create entity fragments")
 		}
@@ -104,7 +122,8 @@ func (i *integrationAcoem) CreateAirQualityObserved(ctx context.Context) error {
 				continue
 			}
 
-			entity, err := entities.New(entityID, fiware.AirQualityObservedTypeName, decorators...)
+			var entity types.Entity
+			entity, err = entities.New(entityID, fiware.AirQualityObservedTypeName, decorators...)
 			if err != nil {
 				logger.Error().Err(err).Msg("failed to create new entity")
 				continue
@@ -125,38 +144,52 @@ func (i *integrationAcoem) CreateAirQualityObserved(ctx context.Context) error {
 	return nil
 }
 
-func (i *integrationAcoem) getSensorLabels(deviceID int) (string, error) {
+func (i *integrationAcoem) getSensorLabels(ctx context.Context, deviceID int) (string, error) {
+	var err error
 
-	client := http.DefaultClient
+	ctx, span := tracer.Start(ctx, "get-sensor-labels")
+	defer func() { tracing.RecordAnyErrorAndEndSpan(err, span) }()
 
-	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/devices/setup/%d", i.baseUrl, deviceID), nil)
+	httpClient := http.Client{
+		Transport: otelhttp.NewTransport(http.DefaultTransport),
+	}
+
+	var req *http.Request
+	req, err = http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/devices/setup/%d", i.baseUrl, deviceID), nil)
 	if err != nil {
-		return "", fmt.Errorf("failed to create request: %s", err.Error())
+		err = fmt.Errorf("failed to create request: %s", err.Error())
+		return "", err
 	}
 	req.Header.Add("Accept", "application/json")
 	req.Header.Add("Authorization", i.accessToken)
 
-	resp, err := client.Do(req)
+	var resp *http.Response
+	resp, err = httpClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("request failed: %s", err.Error())
+		err = fmt.Errorf("request failed: %s", err.Error())
+		return "", err
 	}
 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("request failed, expected status code %d but got %d", http.StatusOK, resp.StatusCode)
+		err = fmt.Errorf("request failed, expected status code %d but got %d", http.StatusOK, resp.StatusCode)
+		return "", err
 	}
 
 	sensors := []domain.Sensor{}
 
-	bodyBytes, err := io.ReadAll(resp.Body)
+	var bodyBytes []byte
+	bodyBytes, err = io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("failed to read response body: %s", err.Error())
+		err = fmt.Errorf("failed to read response body: %s", err.Error())
+		return "", err
 	}
 
 	err = json.Unmarshal(bodyBytes, &sensors)
 	if err != nil {
-		return "", fmt.Errorf("failed to unmarshal response body: %s", err.Error())
+		err = fmt.Errorf("failed to unmarshal response body: %s", err.Error())
+		return "", err
 	}
 
 	sensorLabels := []string{}
@@ -215,79 +248,108 @@ func createFragmentsFromSensorData(sensors []domain.Channel, timestamp string) [
 	return readings
 }
 
-func (i *integrationAcoem) getDeviceData(device domain.Device, sensorLabels string) ([]domain.DeviceData, error) {
+func (i *integrationAcoem) getDeviceData(ctx context.Context, device domain.Device, sensorLabels string) ([]domain.DeviceData, error) {
+	var err error
+
+	ctx, span := tracer.Start(ctx, "get-device-data")
+	defer func() { tracing.RecordAnyErrorAndEndSpan(err, span) }()
+
+	httpClient := http.Client{
+		Transport: otelhttp.NewTransport(http.DefaultTransport),
+	}
+
 	if device.UniqueId == 0 || device.DeviceName == "" || sensorLabels == "" {
-		return nil, fmt.Errorf("cannot retrieve sensor data as either station ID, device name, or sensor labels are empty")
+		err = fmt.Errorf("cannot retrieve sensor data as either station ID, device name, or sensor labels are empty")
+		return nil, err
 	}
 	deviceData := []domain.DeviceData{}
 
-	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/devicedata/%d/latest/1/300/data/%s", i.baseUrl, device.UniqueId, sensorLabels), nil)
+	var req *http.Request
+	req, err = http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/devicedata/%d/latest/1/300/data/%s", i.baseUrl, device.UniqueId, sensorLabels), nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %s", err.Error())
+		err = fmt.Errorf("failed to create request: %s", err.Error())
+		return nil, err
 	}
 
 	req.Header.Add("Accept", "application/json")
 	req.Header.Add("Authorization", i.accessToken)
 	req.Header.Add("TimeConvention", "TimeBeginning")
 
-	client := http.DefaultClient
-
-	resp, err := client.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve sensor data: %s", err.Error())
+		err = fmt.Errorf("failed to retrieve sensor data: %s", err.Error())
+		return nil, err
 	}
 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("request failed, expected status code %d, got %d", http.StatusOK, resp.StatusCode)
+		err = fmt.Errorf("request failed, expected status code %d, got %d", http.StatusOK, resp.StatusCode)
+		return nil, err
 	}
 
 	respBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read response body as bytes: %s", err.Error())
+		err = fmt.Errorf("failed to read response body as bytes: %s", err.Error())
+		return nil, err
 	}
 
 	err = json.Unmarshal(respBytes, &deviceData)
 	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal json data: %s", err.Error())
+		err = fmt.Errorf("failed to unmarshal json data: %s", err.Error())
+		return nil, err
 	}
 
 	return deviceData, nil
 }
 
-func (i *integrationAcoem) getDevices() ([]domain.Device, error) {
+func (i *integrationAcoem) getDevices(ctx context.Context) ([]domain.Device, error) {
+	var err error
+
+	ctx, span := tracer.Start(ctx, "get-devices")
+	defer func() { tracing.RecordAnyErrorAndEndSpan(err, span) }()
+
 	devices := []domain.Device{}
 
-	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/devices", i.baseUrl), nil)
+	httpClient := http.Client{
+		Transport: otelhttp.NewTransport(http.DefaultTransport),
+	}
+
+	var req *http.Request
+	req, err = http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/devices", i.baseUrl), nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %s", err.Error())
+		err = fmt.Errorf("failed to create request: %s", err.Error())
+		return nil, err
 	}
 
 	req.Header.Add("Accept", "application/json")
 	req.Header.Add("Authorization", i.accessToken)
 
-	client := http.DefaultClient
-
-	response, err := client.Do(req)
+	var response *http.Response
+	response, err = httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve list of devices: %s", err.Error())
+		err = fmt.Errorf("failed to retrieve list of devices: %s", err.Error())
+		return nil, err
 	}
 
 	defer response.Body.Close()
 
 	if response.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("request failed, expected status code %d, got %d", http.StatusOK, response.StatusCode)
+		err = fmt.Errorf("request failed, expected status code %d, got %d", http.StatusOK, response.StatusCode)
+		return nil, err
 	}
 
-	responseBytes, err := io.ReadAll(response.Body)
+	var responseBytes []byte
+	responseBytes, err = io.ReadAll(response.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read response body as bytes: %s", err.Error())
+		err = fmt.Errorf("failed to read response body as bytes: %s", err.Error())
+		return nil, err
 	}
 
 	err = json.Unmarshal(responseBytes, &devices)
 	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal response: %s,\ndue to: %s", string(responseBytes), err.Error())
+		err = fmt.Errorf("failed to unmarshal response: %s,\ndue to: %s", string(responseBytes), err.Error())
+		return nil, err
 	}
 
 	return devices, nil
