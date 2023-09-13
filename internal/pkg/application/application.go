@@ -56,7 +56,7 @@ func New(ctx context.Context, baseUrl, accountID, accountKey string, cb client.C
 func (i *integrationAcoem) CreateAirQualityObserved(ctx context.Context) error {
 	var err error
 
-	_, span := tracer.Start(ctx, "create-air-qualities")
+	ctx, span := tracer.Start(ctx, "create-air-qualities")
 	defer func() { tracing.RecordAnyErrorAndEndSpan(err, span) }()
 
 	_, ctx, logger := o11y.AddTraceIDToLoggerAndStoreInContext(span, logging.GetFromContext(ctx), ctx)
