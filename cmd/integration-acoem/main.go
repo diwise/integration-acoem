@@ -20,12 +20,13 @@ func main() {
 	defer cleanup()
 
 	baseUrl := env.GetVariableOrDie(logger, "ACOEM_BASEURL", "acoem base url")
-	accessToken := env.GetVariableOrDie(logger, "ACOEM_ACCESS_TOKEN", "acoem access token")
+	accountID := env.GetVariableOrDie(logger, "ACOEM_ACCOUNT_ID", "acoem account ID")
+	accountKey := env.GetVariableOrDie(logger, "ACOEM_ACCOUNT_KEY", "acoem account key")
 	contextBrokerUrl := env.GetVariableOrDie(logger, "CONTEXT_BROKER_URL", "context broker url")
 
 	contextBroker := client.NewContextBrokerClient(contextBrokerUrl)
 
-	a := application.New(ctx, baseUrl, accessToken, contextBroker)
+	a := application.New(ctx, baseUrl, accountID, accountKey, contextBroker)
 
 	a.CreateAirQualityObserved(ctx)
 }
