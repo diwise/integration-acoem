@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -30,7 +31,14 @@ type integrationAcoem struct {
 	cb          client.ContextBrokerClient
 }
 
-func New(ctx context.Context, baseUrl, accessToken string, cb client.ContextBrokerClient) IntegrationAcoem {
+func New(ctx context.Context, baseUrl, accountID, accountKey string, cb client.ContextBrokerClient) IntegrationAcoem {
+	accessToken := fmt.Sprintf(
+		"Basic %s",
+		base64.StdEncoding.EncodeToString(
+			[]byte(fmt.Sprintf("%s:%s", accountID, accountKey)),
+		),
+	)
+
 	return &integrationAcoem{
 		baseUrl:     baseUrl,
 		accessToken: accessToken,

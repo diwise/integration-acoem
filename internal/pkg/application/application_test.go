@@ -133,7 +133,7 @@ func TestThatGetSensorDataReturnsAndMarshalsCorrectly(t *testing.T) {
 }
 
 func newMockApp(t *testing.T, serverURL string) *integrationAcoem {
-	app := New(context.Background(), serverURL, "notreallyanaccesstoken", nil)
+	app := New(context.Background(), serverURL, "user", "pass", nil)
 	mockApp := app.(*integrationAcoem)
 
 	return mockApp
