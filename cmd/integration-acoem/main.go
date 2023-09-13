@@ -29,4 +29,6 @@ func main() {
 	a := application.New(ctx, baseUrl, accountID, accountKey, contextBroker)
 
 	a.CreateAirQualityObserved(ctx)
+
+	logger.Info().Msg("job done")
 }
