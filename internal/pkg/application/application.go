@@ -25,7 +25,6 @@ type IntegrationAcoem interface {
 	GetDeviceData(device domain.Device, sensorLabels string) ([]domain.DeviceData, error)
 	GetSensorLabels(deviceID int) (string, error)
 	CreateOrUpdateAirQualityObserved(ctx context.Context, cbClient client.ContextBrokerClient, sensors []domain.DeviceData, deviceName string, uniqueId int) error
-	CreateAndSendAirQualityAsLWM2M(ctx context.Context) error
 }
 
 type integrationAcoem struct {
@@ -38,10 +37,6 @@ func New(ctx context.Context, baseUrl, accessToken string) IntegrationAcoem {
 		baseUrl:     baseUrl,
 		accessToken: accessToken,
 	}
-}
-
-func (i *integrationAcoem) CreateAndSendAirQualityAsLWM2M(ctx context.Context) error {
-	return nil
 }
 
 func (i *integrationAcoem) CreateOrUpdateAirQualityObserved(ctx context.Context, cbClient client.ContextBrokerClient, sensors []domain.DeviceData, deviceName string, uniqueId int) error {

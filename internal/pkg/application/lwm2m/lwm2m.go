@@ -8,8 +8,10 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
+	"github.com/diwise/integration-acoem/domain"
 	"github.com/diwise/service-chassis/pkg/infrastructure/env"
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/tracing"
@@ -33,25 +35,45 @@ const (
 	TemperatureURN string = "urn:oma:lwm2m:ext:3303"
 )
 
-func CreateTemperature(ctx context.Context, temp float64, date time.Time, uniqueId, url string) error {
+func CreateAndSendAsLWM2M(ctx context.Context, sensors []domain.DeviceData, uniqueId int, deviceName, url string) error {
 	logger := logging.GetFromContext(ctx)
 
 	var errs []error
 
-	log := logger.With().
-		Str("device_id", uniqueId).Logger()
+	/*
+		Go through deviceData.Channels, create lwm2m packs for the properties we recognise:
+			humidity
+			temperature
 
-	pack, err := temperature(ctx, uniqueId, temp, date)
-	if err != nil {
-		log.Error().Err(err).Msg("unable to create lwm2m temperature object")
-	}
+		Create airquality for pollutants, where each pollutant is a pack on the record or whichever order it is.
+	*/
 
-	log.Info().Msgf("sending lwm2m pack for %s", date.Format(time.RFC3339))
+	log := logger.With().Str("device_id", strconv.Itoa(uniqueId)).Logger()
 
-	err = send(ctx, url, pack)
-	if err != nil {
-		log.Error().Err(err).Msg("unable to POST lwm2m temperature")
-		errs = append(errs, err)
+	uniqueIdStr := strconv.Itoa(uniqueId)
+
+	for _, s := range sensors {
+		timestamp, err := time.Parse(time.RFC3339, s.Timestamp.Timestamp)
+		if err != nil {
+			errs = append(errs, err)
+		}
+
+		for _, c := range s.Channels {
+			if c.SensorName == "temperature" {
+				pack, err := temperature(ctx, uniqueIdStr, c.PreScaled.Reading, timestamp)
+				if err != nil {
+					log.Error().Err(err).Msg("unable to create lwm2m temperature object")
+				}
+
+				err = send(ctx, url, pack)
+				if err != nil {
+					log.Error().Err(err).Msg("unable to POST lwm2m temperature")
+					errs = append(errs, err)
+				}
+
+				log.Info().Msgf("sending lwm2m pack for %s", timestamp)
+			}
+		}
 	}
 
 	return errors.Join(errs...)
@@ -63,6 +85,26 @@ func temperature(ctx context.Context, deviceID string, temp float64, date time.T
 	}
 
 	pack := NewSenMLPack(deviceID, TemperatureURN, date, SensorValue(temp, date))
+
+	return pack, nil
+}
+
+func airquality(ctx context.Context, deviceID string, temp float64, date time.Time) (senml.Pack, error) {
+	SensorValue := func(v float64, t time.Time) SenMLDecoratorFunc {
+		return Value("17", v, t, "")
+	}
+
+	pack := NewSenMLPack(deviceID, AirQualityURN, date, SensorValue(temp, date))
+
+	return pack, nil
+}
+
+func humidity(ctx context.Context, deviceID string, temp float64, date time.Time) (senml.Pack, error) {
+	SensorValue := func(v float64, t time.Time) SenMLDecoratorFunc {
+		return Value("5700", v, t, senml.UnitRelativeHumidity)
+	}
+
+	pack := NewSenMLPack(deviceID, HumidityURN, date, SensorValue(temp, date))
 
 	return pack, nil
 }

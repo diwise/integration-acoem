@@ -10,6 +10,7 @@ import (
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y"
 
 	"github.com/diwise/integration-acoem/internal/pkg/application"
+	"github.com/diwise/integration-acoem/internal/pkg/application/lwm2m"
 )
 
 const (
@@ -84,7 +85,7 @@ func main() {
 		}
 
 		if outputType == OutputTypeLwm2m {
-			a.CreateAndSendAirQualityAsLWM2M(ctx)
+			lwm2m.CreateAndSendAsLWM2M(ctx, sensors, d.UniqueId, d.DeviceName, lwm2mUrl)
 		}
 	}
 
