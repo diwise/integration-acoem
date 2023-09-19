@@ -31,7 +31,8 @@ func main() {
 	flag.Parse()
 
 	baseUrl := env.GetVariableOrDie(logger, "ACOEM_BASEURL", "acoem base url")
-	accessToken := env.GetVariableOrDie(logger, "ACOEM_ACCESS_TOKEN", "acoem access token")
+	accountID := env.GetVariableOrDie(logger, "ACOEM_ACCOUNT_ID", "acoem account ID")
+	accountKey := env.GetVariableOrDie(logger, "ACOEM_ACCOUNT_KEY", "acoem account key")
 	cipUrl := env.GetVariableOrDie(logger, "CONTEXT_BROKER_URL", "context broker url")
 	lwm2mUrl := env.GetVariableOrDefault(logger, "LWM2M_ENDPOINT_URL", "")
 
@@ -61,21 +62,22 @@ func main() {
 
 	contextBroker := client.NewContextBrokerClient(cipUrl)
 
-	a := application.New(ctx, baseUrl, accessToken)
+	a := application.New(ctx, baseUrl, accountID, accountKey, contextBroker)
 
-	devices, err := a.GetDevices()
+	devices, err := a.GetDevices(ctx)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to retrieve devices")
 	}
 
 	for _, d := range devices {
 
-		sensorLabels, err := a.GetSensorLabels(d.UniqueId)
+		sensorLabels, err := a.GetSensorLabels(ctx, d.UniqueId)
 		if err != nil {
 			logger.Error().Err(err).Msgf("failed to retrieve sensor labels for device %d", d.UniqueId)
 		}
+		logger.Info().Msgf("retrieving data for %s from %d", sensorLabels, d.UniqueId)
 
-		sensors, err := a.GetDeviceData(d, sensorLabels)
+		sensors, err := a.GetDeviceData(ctx, d.UniqueId, sensorLabels)
 		if err != nil {
 			logger.Error().Err(err).Msg("failed to retrieve sensor data")
 		}
