@@ -57,62 +57,64 @@ func CreateAndSendAsLWM2M(ctx context.Context, sensors []domain.DeviceData, uniq
 		for _, c := range s.Channels {
 			if strings.EqualFold("Temperature", c.SensorName) {
 				if _, ok := packs[TemperatureURN]; !ok {
-					packs[TemperatureURN] = newPack(TemperatureURN, "5700", uniqueIdStr, c.PreScaled.Reading, timestamp, timestamp)
+					packs[TemperatureURN] = newPack(TemperatureURN, "5700", uniqueIdStr, c.PreScaled.Reading, senml.UnitCelsius, timestamp, timestamp)
 				}
 			}
 			if strings.EqualFold("Humidity", c.SensorName) {
 				if _, ok := packs[HumidityURN]; !ok {
-					packs[HumidityURN] = newPack(HumidityURN, "5700", uniqueIdStr, c.PreScaled.Reading, timestamp, timestamp)
+					packs[HumidityURN] = newPack(HumidityURN, "5700", uniqueIdStr, c.PreScaled.Reading, senml.UnitRelativeHumidity, timestamp, timestamp)
 				}
 			}
 			if strings.EqualFold("Particulate Matter (PM 10)", c.SensorName) {
 				if _, ok := packs[AirQualityURN]; !ok {
-					packs[AirQualityURN] = newPack(AirQualityURN, "1", uniqueIdStr, c.PreScaled.Reading, timestamp, timestamp)
+					packs[AirQualityURN] = newPack(AirQualityURN, "1", uniqueIdStr, c.PreScaled.Reading, "ug/m3", timestamp, timestamp)
 				} else {
-					packs[AirQualityURN] = append(packs[AirQualityURN], newRec("1", c.PreScaled.Reading, timestamp))
+					packs[AirQualityURN] = append(packs[AirQualityURN], newRec("1", c.PreScaled.Reading, "ug/m3", timestamp))
 				}
 			}
 			if strings.EqualFold("Particulate Matter (PM 2.5)", c.SensorName) {
 				if _, ok := packs[AirQualityURN]; !ok {
-					packs[AirQualityURN] = newPack(AirQualityURN, "3", uniqueIdStr, c.PreScaled.Reading, timestamp, timestamp)
+					packs[AirQualityURN] = newPack(AirQualityURN, "3", uniqueIdStr, c.PreScaled.Reading, "ug/m3", timestamp, timestamp)
 				} else {
-					packs[AirQualityURN] = append(packs[AirQualityURN], newRec("3", c.PreScaled.Reading, timestamp))
+					packs[AirQualityURN] = append(packs[AirQualityURN], newRec("3", c.PreScaled.Reading, "ug/m3", timestamp))
 				}
 			}
 			if strings.EqualFold("Particulate Matter (PM 1)", c.SensorName) {
 				if _, ok := packs[AirQualityURN]; !ok {
-					packs[AirQualityURN] = newPack(AirQualityURN, "5", uniqueIdStr, c.PreScaled.Reading, timestamp, timestamp)
+					packs[AirQualityURN] = newPack(AirQualityURN, "5", uniqueIdStr, c.PreScaled.Reading, "ug/m3", timestamp, timestamp)
 				} else {
-					packs[AirQualityURN] = append(packs[AirQualityURN], newRec("5", c.PreScaled.Reading, timestamp))
+					packs[AirQualityURN] = append(packs[AirQualityURN], newRec("5", c.PreScaled.Reading, "ug/m3", timestamp))
 				}
 			}
 			if strings.EqualFold("Nitrogen Dioxide", c.SensorName) {
 				if _, ok := packs[AirQualityURN]; !ok {
-					packs[AirQualityURN] = newPack(AirQualityURN, "15", uniqueIdStr, c.PreScaled.Reading, timestamp, timestamp)
+					packs[AirQualityURN] = newPack(AirQualityURN, "15", uniqueIdStr, c.PreScaled.Reading, "ppm", timestamp, timestamp)
 				} else {
-					packs[AirQualityURN] = append(packs[AirQualityURN], newRec("15", c.PreScaled.Reading, timestamp))
+					packs[AirQualityURN] = append(packs[AirQualityURN], newRec("15", c.PreScaled.Reading, "ppm", timestamp))
 				}
 			}
 			if strings.EqualFold("Nitric Oxide", c.SensorName) {
 				if _, ok := packs[AirQualityURN]; !ok {
-					packs[AirQualityURN] = newPack(AirQualityURN, "19", uniqueIdStr, c.PreScaled.Reading, timestamp, timestamp)
+					packs[AirQualityURN] = newPack(AirQualityURN, "19", uniqueIdStr, c.PreScaled.Reading, "ppm", timestamp, timestamp)
 				} else {
-					packs[AirQualityURN] = append(packs[AirQualityURN], newRec("19", c.PreScaled.Reading, timestamp))
+					packs[AirQualityURN] = append(packs[AirQualityURN], newRec("19", c.PreScaled.Reading, "ppm", timestamp))
 				}
 			}
 		}
 
 		for _, p := range packs {
 			err := sender(ctx, url, p)
-			log.Error().Err(err).Msg("could not send pack")
-			errs = append(errs, err)
+			if err != nil {
+				log.Error().Err(err).Msg("could not send pack")
+				errs = append(errs, err)
+			}
 		}
 	}
 
 	return errors.Join(errs...)
 }
 
-func newPack(baseName, name, id string, v float64, bt, t time.Time) senml.Pack {
+func newPack(baseName, name, id string, v float64, u string, bt, t time.Time) senml.Pack {
 	p := senml.Pack{
 		senml.Record{
 			BaseName:    baseName,
@@ -120,16 +122,17 @@ func newPack(baseName, name, id string, v float64, bt, t time.Time) senml.Pack {
 			Name:        "0",
 			StringValue: id,
 		},
-		newRec(name, v, t),
+		newRec(name, v, u, t),
 	}
 	return p
 }
 
-func newRec(name string, v float64, t time.Time) senml.Record {
+func newRec(name string, v float64, u string, t time.Time) senml.Record {
 	return senml.Record{
-		Name:     name,
-		Value:    &v,
-		BaseTime: float64(t.Unix()),
+		Name:  name,
+		Value: &v,
+		Time:  float64(t.Unix()),
+		Unit:  u,
 	}
 }
 
