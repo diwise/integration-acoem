@@ -59,7 +59,7 @@ func CreateAndSendAsLWM2M(ctx context.Context, sensors []domain.DeviceData, uniq
 		}
 
 		for _, c := range s.Channels {
-			if c.SensorName == "temperature" {
+			if c.SensorName == "Temperature" {
 				pack, err := temperature(ctx, uniqueIdStr, c.PreScaled.Reading, timestamp)
 				if err != nil {
 					log.Error().Err(err).Msg("unable to create lwm2m temperature object")
@@ -68,6 +68,19 @@ func CreateAndSendAsLWM2M(ctx context.Context, sensors []domain.DeviceData, uniq
 				err = send(ctx, url, pack)
 				if err != nil {
 					log.Error().Err(err).Msg("unable to POST lwm2m temperature")
+					errs = append(errs, err)
+				}
+
+				log.Info().Msgf("sending lwm2m pack for %s", timestamp)
+			} else if c.SensorName == "RelativeHumidity" {
+				pack, err := humidity(ctx, uniqueIdStr, c.PreScaled.Reading, timestamp)
+				if err != nil {
+					log.Error().Err(err).Msg("unable to create lwm2m humidity object")
+				}
+
+				err = send(ctx, url, pack)
+				if err != nil {
+					log.Error().Err(err).Msg("unable to POST lwm2m humidity")
 					errs = append(errs, err)
 				}
 
