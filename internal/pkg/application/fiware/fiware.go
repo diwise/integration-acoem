@@ -19,7 +19,7 @@ import (
 	"go.opentelemetry.io/otel"
 )
 
-var tracer = otel.Tracer("integration-acoem/app")
+var tracer = otel.Tracer("integration-acoem/fiware")
 
 func CreateOrUpdateAirQualityObserved(ctx context.Context, cbClient client.ContextBrokerClient, sensors []domain.DeviceData, deviceName string, uniqueId int) error {
 	var err error
