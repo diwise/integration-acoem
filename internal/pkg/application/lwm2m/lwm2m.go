@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/diwise/integration-acoem/domain"
@@ -35,81 +36,106 @@ const (
 	TemperatureURN string = "urn:oma:lwm2m:ext:3303"
 )
 
-func CreateAndSendAsLWM2M(ctx context.Context, sensors []domain.DeviceData, uniqueId int, deviceName, url string) error {
+func CreateAndSendAsLWM2M(ctx context.Context, sensors []domain.DeviceData, uniqueId int, url string, sender SenderFunc) error {
 	logger := logging.GetFromContext(ctx)
 
 	var errs []error
 
-	/*
-		Go through deviceData.Channels, create lwm2m packs for the properties we recognise:
-			humidity
-			temperature
-
-		Create airquality for pollutants, where each pollutant is a pack on the record or whichever order it is.
-	*/
-
-	log := logger.With().Str("device_id", strconv.Itoa(uniqueId)).Logger()
-
 	uniqueIdStr := strconv.Itoa(uniqueId)
+	log := logger.With().Str("device_id", uniqueIdStr).Logger()
 
 	for _, s := range sensors {
 		timestamp, err := time.Parse(time.RFC3339, s.Timestamp.Timestamp)
 		if err != nil {
 			errs = append(errs, err)
+			log.Error().Err(err).Msg("could not parse timestamp")
+			continue
 		}
 
+		packs := make(map[string]senml.Pack)
+
 		for _, c := range s.Channels {
-			if c.SensorName == "temperature" {
-				pack, err := temperature(ctx, uniqueIdStr, c.PreScaled.Reading, timestamp)
-				if err != nil {
-					log.Error().Err(err).Msg("unable to create lwm2m temperature object")
+			if strings.EqualFold("Temperature", c.SensorName) {
+				if _, ok := packs[TemperatureURN]; !ok {
+					packs[TemperatureURN] = newPack(TemperatureURN, "5700", uniqueIdStr, c.PreScaled.Reading, timestamp, timestamp)
 				}
-
-				err = send(ctx, url, pack)
-				if err != nil {
-					log.Error().Err(err).Msg("unable to POST lwm2m temperature")
-					errs = append(errs, err)
-				}
-
-				log.Info().Msgf("sending lwm2m pack for %s", timestamp)
 			}
+			if strings.EqualFold("Humidity", c.SensorName) {
+				if _, ok := packs[HumidityURN]; !ok {
+					packs[HumidityURN] = newPack(HumidityURN, "5700", uniqueIdStr, c.PreScaled.Reading, timestamp, timestamp)
+				}
+			}
+			if strings.EqualFold("Particulate Matter (PM 10)", c.SensorName) {
+				if _, ok := packs[AirQualityURN]; !ok {
+					packs[AirQualityURN] = newPack(AirQualityURN, "1", uniqueIdStr, c.PreScaled.Reading, timestamp, timestamp)
+				} else {
+					packs[AirQualityURN] = append(packs[AirQualityURN], newRec("1", c.PreScaled.Reading, timestamp))
+				}
+			}
+			if strings.EqualFold("Particulate Matter (PM 2.5)", c.SensorName) {
+				if _, ok := packs[AirQualityURN]; !ok {
+					packs[AirQualityURN] = newPack(AirQualityURN, "3", uniqueIdStr, c.PreScaled.Reading, timestamp, timestamp)
+				} else {
+					packs[AirQualityURN] = append(packs[AirQualityURN], newRec("3", c.PreScaled.Reading, timestamp))
+				}
+			}
+			if strings.EqualFold("Particulate Matter (PM 1)", c.SensorName) {
+				if _, ok := packs[AirQualityURN]; !ok {
+					packs[AirQualityURN] = newPack(AirQualityURN, "5", uniqueIdStr, c.PreScaled.Reading, timestamp, timestamp)
+				} else {
+					packs[AirQualityURN] = append(packs[AirQualityURN], newRec("5", c.PreScaled.Reading, timestamp))
+				}
+			}
+			if strings.EqualFold("Nitrogen Dioxide", c.SensorName) {
+				if _, ok := packs[AirQualityURN]; !ok {
+					packs[AirQualityURN] = newPack(AirQualityURN, "15", uniqueIdStr, c.PreScaled.Reading, timestamp, timestamp)
+				} else {
+					packs[AirQualityURN] = append(packs[AirQualityURN], newRec("15", c.PreScaled.Reading, timestamp))
+				}
+			}
+			if strings.EqualFold("Nitric Oxide", c.SensorName) {
+				if _, ok := packs[AirQualityURN]; !ok {
+					packs[AirQualityURN] = newPack(AirQualityURN, "19", uniqueIdStr, c.PreScaled.Reading, timestamp, timestamp)
+				} else {
+					packs[AirQualityURN] = append(packs[AirQualityURN], newRec("19", c.PreScaled.Reading, timestamp))
+				}
+			}
+		}
+
+		for _, p := range packs {
+			err := sender(ctx, url, p)
+			log.Error().Err(err).Msg("could not send pack")
+			errs = append(errs, err)
 		}
 	}
 
 	return errors.Join(errs...)
 }
 
-func temperature(ctx context.Context, deviceID string, temp float64, date time.Time) (senml.Pack, error) {
-	SensorValue := func(v float64, t time.Time) SenMLDecoratorFunc {
-		return Value("5700", v, t, senml.UnitCelsius)
+func newPack(baseName, name, id string, v float64, bt, t time.Time) senml.Pack {
+	p := senml.Pack{
+		senml.Record{
+			BaseName:    baseName,
+			BaseTime:    float64(bt.Unix()),
+			Name:        "0",
+			StringValue: id,
+		},
+		newRec(name, v, t),
 	}
-
-	pack := NewSenMLPack(deviceID, TemperatureURN, date, SensorValue(temp, date))
-
-	return pack, nil
+	return p
 }
 
-func airquality(ctx context.Context, deviceID string, temp float64, date time.Time) (senml.Pack, error) {
-	SensorValue := func(v float64, t time.Time) SenMLDecoratorFunc {
-		return Value("17", v, t, "")
+func newRec(name string, v float64, t time.Time) senml.Record {
+	return senml.Record{
+		Name:     name,
+		Value:    &v,
+		BaseTime: float64(t.Unix()),
 	}
-
-	pack := NewSenMLPack(deviceID, AirQualityURN, date, SensorValue(temp, date))
-
-	return pack, nil
 }
 
-func humidity(ctx context.Context, deviceID string, temp float64, date time.Time) (senml.Pack, error) {
-	SensorValue := func(v float64, t time.Time) SenMLDecoratorFunc {
-		return Value("5700", v, t, senml.UnitRelativeHumidity)
-	}
+type SenderFunc = func(context.Context, string, senml.Pack) error
 
-	pack := NewSenMLPack(deviceID, HumidityURN, date, SensorValue(temp, date))
-
-	return pack, nil
-}
-
-func send(ctx context.Context, url string, pack senml.Pack) error {
+func Send(ctx context.Context, url string, pack senml.Pack) error {
 	var err error
 
 	ctx, span := tracer.Start(ctx, "send-object")
