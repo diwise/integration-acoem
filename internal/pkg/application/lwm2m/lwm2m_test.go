@@ -10,7 +10,7 @@ import (
 	"github.com/matryer/is"
 )
 
-func TestXxx(t *testing.T) {
+func TestCreateAndSendAsLWM2M(t *testing.T) {
 	is := is.New(t)
 
 	var deviceData []domain.DeviceData
