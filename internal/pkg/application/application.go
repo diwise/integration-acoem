@@ -9,8 +9,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/diwise/context-broker/pkg/ngsild/client"
-
 	"github.com/diwise/integration-acoem/domain"
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/tracing"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -26,12 +24,11 @@ type IntegrationAcoem interface {
 type integrationAcoem struct {
 	baseUrl     string
 	accessToken string
-	cb          client.ContextBrokerClient
 }
 
 var tracer = otel.Tracer("integration-acoem/app")
 
-func New(baseUrl, accountID, accountKey string, cb client.ContextBrokerClient) IntegrationAcoem {
+func New(baseUrl, accountID, accountKey string) IntegrationAcoem {
 	accessToken := fmt.Sprintf(
 		"Basic %s",
 		base64.StdEncoding.EncodeToString(
@@ -42,7 +39,6 @@ func New(baseUrl, accountID, accountKey string, cb client.ContextBrokerClient) I
 	return &integrationAcoem{
 		baseUrl:     baseUrl,
 		accessToken: accessToken,
-		cb:          cb,
 	}
 }
 

@@ -61,14 +61,14 @@ func main() {
 		logger.Fatal().Msg("no output type selected")
 	}
 
-	contextBroker := client.NewContextBrokerClient(cipUrl)
-
-	a := application.New(baseUrl, accountID, accountKey, contextBroker)
+	a := application.New(baseUrl, accountID, accountKey)
 
 	devices, err := a.GetDevices(ctx)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to retrieve devices")
 	}
+
+	contextBroker := client.NewContextBrokerClient(cipUrl)
 
 	for _, d := range devices {
 		sensorLabels, err := a.GetSensorLabels(ctx, d.UniqueId)

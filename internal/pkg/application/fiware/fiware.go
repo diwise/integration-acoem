@@ -85,16 +85,41 @@ func createFragmentsFromSensorData(sensors []domain.Channel, timestamp string) [
 	readings := []entities.EntityDecoratorFunc{}
 
 	for _, sensor := range sensors {
-		name, ok := domain.SensorNames[sensor.SensorName]
+		name, ok := sensorNames[sensor.SensorName]
 		if ok {
 			readings = append(readings, Number(
 				name,
 				sensor.Scaled.Reading,
-				properties.UnitCode(domain.UnitCodes[sensor.UnitName]),
+				properties.UnitCode(unitCodes[sensor.UnitName]),
 				properties.ObservedAt(timestamp),
 			))
 		}
 	}
 
 	return readings
+}
+
+var unitCodes map[string]string = map[string]string{
+	"Micrograms Per Cubic Meter": "GQ",
+	"Volts":                      "VLT",
+	"Celsius":                    "CEL",
+	"Percent":                    "P1",
+	"Hectopascals":               "A97",
+	"Parts Per Billion":          "61",
+	"Pressure (mbar)":            "MBR",
+}
+
+var sensorNames map[string]string = map[string]string{
+	"Humidity":                    "relativeHumidity",
+	"Temperature":                 "temperature",
+	"Air Pressure":                "atmosphericPressure",
+	"Particulate Matter (PM 1)":   "PM1",
+	"PM 4":                        "PM4",
+	"Particulate Matter (PM 10)":  "PM10",
+	"Particulate Matter (PM 2.5)": "PM25",
+	"Total Suspended Particulate": "totalSuspendedParticulate",
+	"Voltage":                     "voltage",
+	"Nitric Oxide":                "NO",
+	"Nitrogen Dioxide":            "NO2",
+	"Nitrogen Oxides":             "NOx",
 }
