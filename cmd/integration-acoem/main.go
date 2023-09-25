@@ -34,7 +34,7 @@ func main() {
 	baseUrl := env.GetVariableOrDie(logger, "ACOEM_BASEURL", "acoem base url")
 	accountID := env.GetVariableOrDie(logger, "ACOEM_ACCOUNT_ID", "acoem account ID")
 	accountKey := env.GetVariableOrDie(logger, "ACOEM_ACCOUNT_KEY", "acoem account key")
-	cipUrl := env.GetVariableOrDie(logger, "CONTEXT_BROKER_URL", "context broker url")
+	cipUrl := env.GetVariableOrDefault(logger, "CONTEXT_BROKER_URL", "")
 	lwm2mUrl := env.GetVariableOrDefault(logger, "LWM2M_ENDPOINT_URL", "")
 
 	if outputType == OutputTypeLwm2m {
