@@ -49,7 +49,7 @@ func CreateOrUpdateAirQualityObserved(ctx context.Context, cbClient client.Conte
 	var fragment types.EntityFragment
 	fragment, err = entities.NewFragment(decorators...)
 	if err != nil {
-		logger.Error().Err(err).Msg("failed to create entity fragments")
+		logger.Error("failed to create entity fragments", "err", err.Error())
 	}
 
 	entityID := fw.AirQualityObservedIDPrefix + strconv.Itoa(uniqueId)
@@ -57,25 +57,24 @@ func CreateOrUpdateAirQualityObserved(ctx context.Context, cbClient client.Conte
 	_, err = cbClient.MergeEntity(ctx, entityID, fragment, headers)
 	if err != nil {
 		if !errors.Is(err, ngsierrors.ErrNotFound) {
-			logger.Error().Err(err).Msg("failed to merge entity")
+			logger.Error("failed to merge entity", "err", err.Error())
 		}
 
 		var entity types.Entity
 		entity, err = entities.New(entityID, fw.AirQualityObservedTypeName, decorators...)
 		if err != nil {
-			logger.Error().Err(err).Msg("failed to create new entity")
+			logger.Error("failed to create new entity", "err", err.Error())
 
 		}
 
 		_, err = cbClient.CreateEntity(ctx, entity, headers)
 		if err != nil {
-			logger.Error().Err(err).Msg("failed to post entity to context broker")
-
+			logger.Error("failed to post entity to context broker", "err", err.Error())
 		}
 
-		logger.Info().Msgf("created entity %s", entityID)
+		logger.Info("entity created", "entity_id", entityID)
 	} else {
-		logger.Info().Msgf("updated entity %s", entityID)
+		logger.Info("entity updated", "entity_id", entityID)
 	}
 
 	return nil

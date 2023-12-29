@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -17,7 +18,6 @@ import (
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/tracing"
 	"github.com/farshidtz/senml/v2"
-	"github.com/rs/zerolog"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 )
@@ -25,7 +25,7 @@ import (
 var tlsSkipVerify bool
 
 func init() {
-	tlsSkipVerify = env.GetVariableOrDefault(zerolog.Logger{}, "TLS_SKIP_VERIFY", "0") == "1"
+	tlsSkipVerify = env.GetVariableOrDefault(context.Background(), "TLS_SKIP_VERIFY", "0") == "1"
 }
 
 var tracer = otel.Tracer("integration-acoem/lwm2m")
@@ -42,13 +42,13 @@ func CreateAndSendAsLWM2M(ctx context.Context, sensors []domain.DeviceData, uniq
 	var errs []error
 
 	uniqueIdStr := strconv.Itoa(uniqueId)
-	log := logger.With().Str("device_id", uniqueIdStr).Logger()
+	log := logger.With(slog.String("uniqueId", uniqueIdStr))
 
 	for _, s := range sensors {
 		timestamp, err := time.Parse(time.RFC3339, s.Timestamp.Timestamp)
 		if err != nil {
 			errs = append(errs, err)
-			log.Error().Err(err).Msg("could not parse timestamp")
+			log.Error("could not parse timestamp", "err", err.Error())
 			continue
 		}
 
@@ -105,7 +105,7 @@ func CreateAndSendAsLWM2M(ctx context.Context, sensors []domain.DeviceData, uniq
 		for _, p := range packs {
 			err := sender(ctx, url, p)
 			if err != nil {
-				log.Error().Err(err).Msg("could not send pack")
+				log.Error("could not send pack", "err", err.Error())
 				errs = append(errs, err)
 			}
 		}
