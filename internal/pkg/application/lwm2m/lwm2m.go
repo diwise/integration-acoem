@@ -117,7 +117,7 @@ func CreateAndSendAsLWM2M(ctx context.Context, sensors []domain.DeviceData, uniq
 func newPack(baseName, name, id string, v float64, u string, bt, t time.Time) senml.Pack {
 	p := senml.Pack{
 		senml.Record{
-			BaseName:    baseName,
+			BaseName:    fmt.Sprintf("%s/%s/", id, baseName[strings.LastIndex(baseName, ":")+1:]),
 			BaseTime:    float64(bt.Unix()),
 			Name:        "0",
 			StringValue: id,
