@@ -14,10 +14,10 @@ import (
 	"time"
 
 	"github.com/diwise/integration-acoem/domain"
+	"github.com/diwise/senml"
 	"github.com/diwise/service-chassis/pkg/infrastructure/env"
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/tracing"
-	"github.com/farshidtz/senml/v2"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 )
@@ -114,13 +114,13 @@ func CreateAndSendAsLWM2M(ctx context.Context, sensors []domain.DeviceData, uniq
 	return errors.Join(errs...)
 }
 
-func newPack(baseName, name, id string, v float64, u string, bt, t time.Time) senml.Pack {
+func newPack(objectURN, name, id string, v float64, u string, bt, t time.Time) senml.Pack {
 	p := senml.Pack{
 		senml.Record{
-			BaseName:    baseName,
+			BaseName:    fmt.Sprintf("%s/%s/", id, objectURN[strings.LastIndex(objectURN, ":")+1:]),
 			BaseTime:    float64(bt.Unix()),
 			Name:        "0",
-			StringValue: id,
+			StringValue: objectURN,
 		},
 		newRec(name, v, u, t),
 	}
