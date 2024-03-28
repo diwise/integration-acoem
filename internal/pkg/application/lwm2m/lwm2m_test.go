@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/diwise/integration-acoem/domain"
-	"github.com/farshidtz/senml/v2"
+	"github.com/diwise/senml"
 	"github.com/matryer/is"
 )
 
@@ -25,6 +25,13 @@ func TestCreateAndSendAsLWM2M(t *testing.T) {
 
 	is.NoErr(err)
 	is.Equal(3, len(packs))
+
+	clone := packs[0].Clone()
+	rec, ok := clone.GetRecord(senml.FindByName("0"))
+	is.True(ok)
+
+	is.Equal("urn:oma:lwm2m:ext:3304", rec.StringValue)
+	is.Equal("11111/3304/0", rec.Name)
 }
 
 const devicedataJson string = `
