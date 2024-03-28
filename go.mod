@@ -1,6 +1,8 @@
 module github.com/diwise/integration-acoem
 
-go 1.21
+go 1.22.0
+
+toolchain go1.22.1
 
 require (
 	github.com/diwise/context-broker v0.0.0-20240109170329-50af22fba010
@@ -8,7 +10,10 @@ require (
 	github.com/matryer/is v1.4.1
 )
 
-require github.com/matttproud/golang_protobuf_extensions/v2 v2.0.0 // indirect
+require (
+	github.com/diwise/senml v0.0.0-20240320103927-03207b97394b
+	github.com/matttproud/golang_protobuf_extensions/v2 v2.0.0 // indirect
+)
 
 require (
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.46.1
@@ -27,7 +32,6 @@ require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cenkalti/backoff/v4 v4.2.1 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
-	github.com/farshidtz/senml/v2 v2.0.0
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-chi/chi/v5 v5.0.11 // indirect
 	github.com/go-logr/logr v1.4.1 // indirect
