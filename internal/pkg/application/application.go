@@ -118,8 +118,14 @@ func (i *integrationAcoem) GetDeviceData(ctx context.Context, uniqueId int, sens
 	}
 	deviceData := []domain.DeviceData{}
 
+	numberOfRecords := 1 //The number of records you want to retrieve
+	average := "AVG300"  //'AVG' or 'AVERAGE' followed by the average period in seconds. Valid seconds are: 0, 300, 600, 900, 1200, 1800, 3600, 7200, 10800, 14400, 21600, 28800, 43200, 86400
+	type_ := "data"      //This can be 'data', 'diagnostic' or 'datadiagnostic'
+
+	devicedataUrl := fmt.Sprintf("%s/devicedata/%d/latest/%d/%s/%s/%s", i.baseUrl, uniqueId, numberOfRecords, average, type_, sensorLabels)
+
 	var req *http.Request
-	req, err = http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/devicedata/%d/latest/1/300/data/%s", i.baseUrl, uniqueId, sensorLabels), nil)
+	req, err = http.NewRequestWithContext(ctx, http.MethodGet, devicedataUrl, nil)
 	if err != nil {
 		err = fmt.Errorf("failed to create request: %s", err.Error())
 		return nil, err
@@ -127,7 +133,8 @@ func (i *integrationAcoem) GetDeviceData(ctx context.Context, uniqueId int, sens
 
 	req.Header.Add("Accept", "application/json")
 	req.Header.Add("Authorization", i.accessToken)
-	req.Header.Add("TimeConvention", "TimeBeginning")
+	//req.Header.Add("TimeConvention", "TimeBeginning")
+	req.Header.Add("TimeConvention", "TimeEnding") //The time convention for the request
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
@@ -188,15 +195,15 @@ func (i *integrationAcoem) GetDevices(ctx context.Context) ([]domain.Device, err
 
 	defer response.Body.Close()
 
-	if response.StatusCode != http.StatusOK {
-		err = fmt.Errorf("request failed, expected status code %d, got %d", http.StatusOK, response.StatusCode)
-		return nil, err
-	}
-
 	var responseBytes []byte
 	responseBytes, err = io.ReadAll(response.Body)
 	if err != nil {
 		err = fmt.Errorf("failed to read response body as bytes: %s", err.Error())
+		return nil, err
+	}
+
+	if response.StatusCode != http.StatusOK {
+		err = fmt.Errorf("request failed, expected status code %d, got %d", http.StatusOK, response.StatusCode)
 		return nil, err
 	}
 

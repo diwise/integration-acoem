@@ -24,12 +24,12 @@ const (
 func main() {
 	serviceVersion := buildinfo.SourceVersion()
 
-	ctx, logger, cleanup := o11y.Init(context.Background(), serviceName, serviceVersion)
+	ctx, logger, cleanup := o11y.Init(context.Background(), serviceName, serviceVersion, "json")
 	defer cleanup()
 
 	var outputType string
 
-	flag.StringVar(&outputType, "output", "", "-output=<lwm2m or fiware>")
+	flag.StringVar(&outputType, "output", OutputTypeFiware, "-output=<lwm2m or fiware>")
 	flag.Parse()
 
 	baseUrl := env.GetVariableOrDie(ctx, "ACOEM_BASEURL", "acoem base url")
@@ -38,13 +38,6 @@ func main() {
 	cipUrl := env.GetVariableOrDefault(ctx, "CONTEXT_BROKER_URL", "")
 	lwm2mUrl := env.GetVariableOrDefault(ctx, "LWM2M_ENDPOINT_URL", "")
 
-	if outputType == OutputTypeLwm2m {
-		if lwm2mUrl == "" {
-			logger.Error("no URL to lwm2m endpoint specified using env. var LWM2M_ENDPOINT_URL")
-			os.Exit(1)
-		}
-	}
-
 	if outputType == OutputTypeFiware {
 		if cipUrl == "" {
 			logger.Error("no URL to context broker specified using env. var CONTEXT_BROKER_URL")
@@ -52,17 +45,11 @@ func main() {
 		}
 	}
 
-	if outputType == "" {
-		if lwm2mUrl != "" {
-			outputType = OutputTypeLwm2m
-		} else if cipUrl != "" {
-			outputType = OutputTypeFiware
+	if outputType == OutputTypeLwm2m {
+		if lwm2mUrl == "" {
+			logger.Error("no URL to lwm2m endpoint specified using env. var LWM2M_ENDPOINT_URL")
+			os.Exit(1)
 		}
-	}
-
-	if outputType == "" {
-		logger.Error("no output type selected")
-		os.Exit(1)
 	}
 
 	a := application.New(baseUrl, accountID, accountKey)
