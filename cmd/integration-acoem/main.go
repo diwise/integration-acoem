@@ -2,7 +2,11 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 
 	"github.com/diwise/context-broker/pkg/ngsild/client"
@@ -30,6 +34,7 @@ func main() {
 	var outputType string
 
 	flag.StringVar(&outputType, "output", OutputTypeFiware, "-output=<lwm2m or fiware>")
+	testMode := flag.Bool("test", false, "Run in test mode with a local mock CIP server")
 	flag.Parse()
 
 	baseUrl := env.GetVariableOrDie(ctx, "ACOEM_BASEURL", "acoem base url")
@@ -50,6 +55,57 @@ func main() {
 			logger.Error("no URL to lwm2m endpoint specified using env. var LWM2M_ENDPOINT_URL")
 			os.Exit(1)
 		}
+	}
+
+	if *testMode {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodPatch {
+				report := &struct {
+					Type   string `json:"type"`
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{
+					Type:   "https://uri.etsi.org/ngsi-ld/errors/ResourceNotFound",
+					Title:  "Not Found",
+					Detail: "The requested entity was not found",
+				}
+				w.Header().Set("Content-Type", "application/ld+json")
+				w.WriteHeader(http.StatusNotFound)
+				_ = json.NewEncoder(w).Encode(report)
+				return
+			}
+
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				logger.Error("test server: failed to read body", "err", err.Error())
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			defer r.Body.Close()
+
+			var prettyJSON map[string]any
+			err = json.Unmarshal(body, &prettyJSON)
+			if err != nil {
+				logger.Error("test server: failed to unmarshal body", "err", err.Error())
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+
+			prettyBody, err := json.MarshalIndent(prettyJSON, "", "  ")
+			if err != nil {
+				logger.Error("test server: failed to marshal body", "err", err.Error())
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+
+			logger.Info("test server received data", "body", string(prettyBody))
+
+			w.Header().Set("Location", r.URL.RequestURI())
+			w.WriteHeader(http.StatusCreated)
+		}))
+		defer server.Close()
+
+		cipUrl = server.URL
 	}
 
 	a := application.New(baseUrl, accountID, accountKey)
@@ -82,5 +138,4 @@ func main() {
 			lwm2m.CreateAndSendAsLWM2M(ctx, sensors, d.UniqueId, lwm2mUrl, lwm2m.Send)
 		}
 	}
-
 }

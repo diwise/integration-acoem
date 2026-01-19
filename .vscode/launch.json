@@ -18,7 +18,8 @@
             },
             "envFile": "${workspaceFolder}/.vscode/.env",
             "args": [
-                "-output=fiware"
+                "-output=fiware",
+                "-test=true"                
             ]
         }
     ]
